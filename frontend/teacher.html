@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Teacher AI · Skillora AI</title>
+  <link rel="icon" href="/assets/favicon.png" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/theme.css" />
+  <link rel="stylesheet" href="/assets/pages.css" />
+  <script src="/assets/app.js"></script>
+  <style>
+    .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 14px; }
+    .muted { font-size: 12px; }
+    .proof { font-size: 12px; margin-left: 12px; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside id="side" class="side"></aside>
+  <main class="main">
+    <header id="top" class="top"></header>
+    <div class="page">
+
+  <section class="card formcard">
+  <p class="hint">Set your requirements below, upload the reports (PDF), and the system sorts them into
+    Approved, Not approved and Needs manual review. Add only the requirements you care about.</p>
+
+  <label>Assignment / course name <small>(optional, shown on the PDF report)</small>
+    <input type="text" id="assignment" placeholder="for example: AI Lab End-Term Project" /></label>
+
+  <div class="grid">
+    <label>Minimum pages <small>(0 = ignore)</small>
+      <input type="number" id="minPages" value="0" min="0" max="500" /></label>
+    <label>Required sections
+      <small>(separated by commas)</small>
+      <button type="button" class="linkbtn" onclick="fillSections()">use a common list</button>
+      <input type="text" id="sections" placeholder="for example: Abstract, Introduction, Methodology, Conclusion, References" /></label>
+  </div>
+
+  <label>Required keywords / technologies <small>(separated by commas; each one must appear in the report)</small>
+    <input type="text" id="keywords" placeholder="for example: Python, MySQL, React" /></label>
+
+  <label>Other requirements <small>(one per line; checked by AI, which must quote proof from the report)</small>
+    <textarea id="aiReqs" rows="4"
+      placeholder="for example:&#10;The project uses a database&#10;The report includes a testing plan"></textarea></label>
+
+  <label>Project reports <small>(PDF, up to 30)</small>
+    <input type="file" id="files" accept=".pdf" multiple /></label>
+
+  <button class="primary" id="btn" onclick="checkReports()">Check reports</button>
+  <button class="primary" id="btnPdf" onclick="downloadReport()" style="display:none">Download report (PDF)</button>
+
+  </section>
+
+  <p id="status"></p>
+  <div id="result"></div>
+
+  <script>
+    let lastResult = null;
+
+    function el(tag, text, cls) {
+      const e = document.createElement(tag);
+      if (text !== undefined) e.textContent = text;
+      if (cls) e.className = cls;
+      return e;
+    }
+
+    function fillSections() {
+      document.getElementById("sections").value =
+        "Abstract, Introduction, Literature Review, Methodology, Implementation, Results, Conclusion, References";
+    }
+
+    function checkLine(c) {
+      const div = el("div");
+      const cls = c.result === "pass" ? "pass" : c.result === "fail" ? "fail" : "check";
+      const word = c.result === "pass" ? "Pass" : c.result === "fail" ? "Fail" : "Check";
+      div.appendChild(el("span", word, cls));
+      let text = "  " + c.label;
+      if (c.detail && !(c.kind === "ai" && c.result === "pass")) text += " - " + c.detail;
+      div.appendChild(document.createTextNode(text));
+      if (c.detail && c.kind === "ai" && c.result === "pass") {
+        div.appendChild(el("div", 'Proof: "' + c.detail + '"', "proof"));
+      }
+      return div;
+    }
+
+    function group(title, records, intro) {
+      const wrap = el("div");
+      wrap.appendChild(el("h2", title + " (" + records.length + ")"));
+      if (intro) wrap.appendChild(el("p", intro, "muted"));
+      if (records.length === 0) {
+        wrap.appendChild(el("p", "None"));
+        return wrap;
+      }
+      const t = el("table");
+      const head = el("tr");
+      ["Student", "Pages", "Checks"].forEach(h => head.appendChild(el("th", h)));
+      t.appendChild(head);
+      records.forEach(r => {
+        const tr = el("tr");
+        const who = el("td");
+        who.appendChild(el("strong", r.name));
+        if (r.roll_no) who.appendChild(el("div", "Roll no: " + r.roll_no, "muted"));
+        who.appendChild(el("div", r.filename, "muted"));
+        tr.appendChild(who);
+        tr.appendChild(el("td", r.pages ? String(r.pages) : "-"));
+        const checks = el("td");
+        r.checks.forEach(c => checks.appendChild(checkLine(c)));
+        r.notes.forEach(n => {
+          const d = el("div");
+          d.appendChild(el("span", "Note", "check"));
+          d.appendChild(document.createTextNode("  " + n));
+          checks.appendChild(d);
+        });
+        tr.appendChild(checks);
+        t.appendChild(tr);
+      });
+      wrap.appendChild(t);
+      return wrap;
+    }
+
+    function render(data) {
+      const result = document.getElementById("result");
+      result.innerHTML = "";
+      const s = data.summary;
+      const sum = el("div", undefined, "box");
+      sum.appendChild(el("strong",
+        s.total + " reports: " + s.approved + " approved, " + s.unapproved + " not approved, " +
+        s.review + " need manual review"));
+      sum.appendChild(el("div",
+        "Automatic checks are a decision aid. Please verify before final approval.", "muted"));
+      result.appendChild(sum);
+      if (data.ai_note) result.appendChild(el("p", data.ai_note, "hint"));
+
+      const by = status => data.reports.filter(r => r.status === status);
+      result.appendChild(group("Approved", by("approved")));
+      result.appendChild(group("Not approved", by("unapproved")));
+      if (by("review").length) {
+        result.appendChild(group("Needs manual review", by("review"),
+          "The system could not decide these (scanned pages, unreadable files, or a requirement the AI could not prove from the text)."));
+      }
+    }
+
+    async function checkReports() {
+      const files = document.getElementById("files").files;
+      const status = document.getElementById("status");
+      const minPages = parseInt(document.getElementById("minPages").value) || 0;
+      const sections = document.getElementById("sections").value.trim();
+      const keywords = document.getElementById("keywords").value.trim();
+      const aiReqs = document.getElementById("aiReqs").value.trim();
+
+      if (!(minPages > 0 || sections || keywords || aiReqs)) {
+        alert("Add at least one requirement first"); return;
+      }
+      if (files.length === 0) { alert("Choose at least one PDF"); return; }
+      if (files.length > 30) { alert("Please choose at most 30 reports"); return; }
+
+      const form = new FormData();
+      form.append("assignment", document.getElementById("assignment").value.trim());
+      form.append("min_pages", minPages);
+      form.append("sections", sections);
+      form.append("keywords", keywords);
+      form.append("ai_requirements", aiReqs);
+      for (const f of files) form.append("files", f);
+
+      const btn = document.getElementById("btn");
+      btn.disabled = true;
+      status.className = "";
+      status.textContent = aiReqs
+        ? "Reading " + files.length + " reports and running the AI checks... this can take a few minutes"
+        : "Reading " + files.length + " reports... this can take up to a minute";
+      document.getElementById("result").innerHTML = "";
+      document.getElementById("btnPdf").style.display = "none";
+
+      try {
+        const res = await fetch("/api/teacher/check", { method: "POST", body: form });
+        const data = await res.json();
+        if (data.error || data.detail) {
+          status.className = "err";
+          status.textContent = data.error || ("Invalid request: " + JSON.stringify(data.detail));
+          return;
+        }
+        status.textContent = "";
+        lastResult = data;
+        render(data);
+        document.getElementById("btnPdf").style.display = "inline-block";
+      } catch (e) {
+        status.className = "err";
+        status.textContent = "Request failed: " + e;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function downloadReport() {
+      if (!lastResult) return;
+      const btn = document.getElementById("btnPdf");
+      const status = document.getElementById("status");
+      btn.disabled = true;
+      status.className = "";
+      status.textContent = "Building the PDF report...";
+      try {
+        const res = await fetch("/api/teacher/report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ result: lastResult })
+        });
+        const type = res.headers.get("content-type") || "";
+        if (!res.ok || !type.includes("pdf")) {
+          let msg = "Could not build the PDF report.";
+          try { msg = (await res.json()).error || msg; } catch (e) {}
+          status.className = "err";
+          status.textContent = msg;
+          return;
+        }
+        status.textContent = "";
+        const url = URL.createObjectURL(await res.blob());
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "Project_Report_Review.pdf";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+      } catch (e) {
+        status.className = "err";
+        status.textContent = "Request failed: " + e;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+
+    </div>
+  </main>
+</div>
+<script>Skillora.init({ active: "teacher", title: "Teacher AI", sub: "Check student project reports against your requirements" });</script>
+</body>
+</html>

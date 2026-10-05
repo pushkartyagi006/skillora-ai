@@ -1,0 +1,83 @@
+/* Skillora AI shared design. Light + dark themes. */
+:root{--bg:#F3F5FF;--surface:#fff;--text:#0F172A;--muted:#5B6478;--line:#DDE3F5;--blue:#2563EB;--purple:#7C3AED;--cyan:#06B6D4;--tint:#E0E7FF;--side:#0F172A;--shadow:0 1px 2px rgba(15,23,42,.05),0 10px 28px rgba(37,99,235,.07);--soft:#F6F8FF;--ok:#15803D;--ok-bg:#DCFCE7;--warn:#B45309;--warn-bg:#FEF3C7;--bad:#DC2626;--bad-bg:#FEE2E2;--hint-bg:#FFF8E1;--hint-line:#E6A700}
+:root[data-theme=dark]{--bg:#0A0F1F;--surface:#121A33;--text:#E8ECFA;--muted:#9AA5C6;--line:#25305A;--tint:#1B2750;--side:#070B18;--shadow:none;--soft:#0E1530;--ok:#4ADE80;--ok-bg:#12351F;--warn:#FBBF24;--warn-bg:#3A2B0A;--bad:#F87171;--bad-bg:#3B1518;--hint-bg:#2A2410;--hint-line:#B8860B}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;font:15px/1.55 "Plus Jakarta Sans",system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+a{color:var(--blue)}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.ic{width:20px;height:20px;flex:none}
+.wordmark{font-weight:800;letter-spacing:-.02em}.wordmark b{background:linear-gradient(90deg,var(--blue),var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent}
+button{font:inherit;cursor:pointer}
+
+/* buttons + fields */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:10px;padding:11px 18px;font-weight:700;background:var(--blue);color:#fff;text-decoration:none}
+.btn:hover{filter:brightness(1.08)}.btn.block{width:100%}
+.btn.ghost{background:var(--surface);color:var(--text);border:1px solid var(--line)}
+.iconbtn{display:grid;place-items:center;width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text)}
+.field{display:block;margin:0 0 14px}.field span{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+.field input,.field select{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit}
+.msg{min-height:20px;margin:0 0 12px;font-size:14px;color:#DC2626}
+
+/* login page */
+.auth{display:grid;grid-template-columns:1.05fr 1fr;min-height:100vh}
+.auth-brand{position:relative;padding:48px;color:#fff;display:flex;flex-direction:column;justify-content:space-between;background:radial-gradient(120% 90% at 0 0,#1D4ED8 0,#0F172A 60%),#0F172A;overflow:hidden}
+.auth-brand .logo{display:flex;align-items:center;gap:12px;font-size:26px}.auth-brand img{height:46px}
+.auth-brand h1{font-size:clamp(30px,4vw,46px);line-height:1.1;letter-spacing:-.03em;margin:0 0 14px}
+.auth-brand p{color:#B8C4EA;max-width:420px;margin:0}
+.roles{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}.roles span{padding:6px 12px;border:1px solid rgba(255,255,255,.22);border-radius:99px;font-size:13px;color:#D6DEFA}
+.auth-form{padding:48px 7vw;display:flex;flex-direction:column;justify-content:center;position:relative}
+.auth-form .iconbtn{position:absolute;top:20px;right:20px}
+.auth-form h2{margin:0 0 4px;font-size:26px}.auth-form .sub{margin:0 0 22px;color:var(--muted)}
+.tabs{display:grid;grid-template-columns:1fr 1fr;background:var(--tint);padding:4px;border-radius:12px;margin-bottom:22px}
+.tabs button{border:0;background:none;padding:10px;border-radius:9px;font-weight:700;color:var(--muted)}
+.tabs button.on{background:var(--blue);color:#fff}
+
+/* app shell */
+.shell{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+.side{background:var(--side);color:#B6C0E4;padding:20px 14px;display:flex;flex-direction:column;gap:6px;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none;font-size:20px;padding:4px 8px 18px}.brand img{height:34px}
+.side nav{display:flex;flex-direction:column;gap:4px}
+.side a,.navbtn{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;color:#B6C0E4;text-decoration:none;background:none;border:0;width:100%;text-align:left}
+.side a:hover,.navbtn:hover{background:rgba(255,255,255,.07);color:#fff}
+.side a.on{background:var(--blue);color:#fff;font-weight:700}
+.side-bottom{margin-top:auto;border-top:1px solid rgba(255,255,255,.1);padding-top:12px;display:flex;flex-direction:column;gap:4px}
+.main{padding:28px clamp(18px,3vw,40px) 48px;min-width:0}
+.top{display:flex;align-items:center;gap:12px;margin-bottom:22px}.top .grow{flex:1}
+.top h1{margin:0;font-size:24px;letter-spacing:-.02em}.top p{margin:0;color:var(--muted);font-size:14px}
+.userchip{text-decoration:none;color:var(--text);display:flex;align-items:center;gap:10px;padding:5px 12px 5px 5px;border:1px solid var(--line);border-radius:99px;background:var(--surface)}
+.userchip i{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(135deg,var(--blue),var(--purple));color:#fff;font-style:normal;font-weight:700}
+.userchip small{display:block;color:var(--muted);font-size:12px;text-transform:capitalize;line-height:1.2}.userchip strong{font-size:13px;line-height:1.2}
+.menu{display:none}
+
+/* home */
+.herobox{display:grid;grid-template-columns:1.2fr 1fr;align-items:end;gap:20px;border-radius:20px;padding:34px 36px 0;color:#fff;overflow:hidden;background:linear-gradient(120deg,#2563EB,#7C3AED)}
+.herobox h2{margin:0 0 10px;font-size:clamp(24px,3vw,34px);line-height:1.15;letter-spacing:-.02em}
+.herobox p{margin:0 0 20px;color:#E6EBFF;max-width:460px}.herobox .btn{background:#fff;color:#1D4ED8;margin-bottom:34px}
+.steps{display:flex;align-items:flex-end;gap:6px;height:150px;justify-content:flex-end}
+.steps div{width:56px;border-radius:10px 10px 0 0;background:rgba(255,255,255,.22)}
+.steps div:nth-child(1){height:30%}.steps div:nth-child(2){height:48%}.steps div:nth-child(3){height:66%}.steps div:nth-child(4){height:84%;background:rgba(255,255,255,.38)}.steps div:nth-child(5){height:100%;background:#fff}
+h3.sec{margin:30px 0 14px;font-size:17px}
+.fcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px}
+.fcard{display:block;text-decoration:none;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px 18px;box-shadow:var(--shadow);transition:transform .15s,border-color .15s}
+.fcard:hover{transform:translateY(-3px);border-color:var(--c)}
+.fcard .fbadge{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;background:var(--c);color:#fff;margin-bottom:14px}
+.fcard strong{display:block;font-size:16px}.fcard span{color:var(--muted);font-size:13px}
+
+@media(max-width:860px){
+ .userchip div{display:none}.userchip{padding:5px}.top p{display:none}
+ .auth{grid-template-columns:1fr}.auth-brand{display:none}.auth-form{min-height:100vh;padding:64px 22px 32px}
+ .shell{grid-template-columns:1fr}
+ .side{position:fixed;z-index:10;left:-270px;width:250px;transition:left .2s}.side.open{left:0}
+ .menu{display:grid}.herobox{grid-template-columns:1fr}.steps{display:none}.herobox .btn{margin-bottom:30px}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* password eye button (added by app.js to every password box) */
+.pwwrap{position:relative;display:block}
+.pwwrap input{padding-right:46px!important}
+.pwwrap .eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);margin:0;padding:6px;width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:var(--muted);cursor:pointer}
+.pwwrap .eye:hover{background:var(--tint);color:var(--blue)}
+.pwwrap .eye .ic{width:19px;height:19px}
+.page .pwwrap{margin-top:6px}
+.page .pwwrap input{margin-top:0}

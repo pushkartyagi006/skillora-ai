@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hiring AI · Skillora AI</title>
+  <link rel="icon" href="/assets/favicon.png" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/theme.css" />
+  <link rel="stylesheet" href="/assets/pages.css" />
+  <script src="/assets/app.js"></script>
+  <style>
+    .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .muted { font-size: 12px; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside id="side" class="side"></aside>
+  <main class="main">
+    <header id="top" class="top"></header>
+    <div class="page">
+
+
+  <section class="card formcard">
+  <label>Job title <small>(optional, shown at the top of the PDF report)</small>
+    <input type="text" id="jobTitle" placeholder="for example: Full Stack Developer - Pune" /></label>
+
+  <label>Job description
+    <textarea id="jd" rows="7" placeholder="Paste the job description here"></textarea></label>
+
+  <label>Must-have skills <small>(optional, separated by commas; a resume without all of them is not shortlisted)</small>
+    <input type="text" id="must" placeholder="for example: Python, SQL, React" /></label>
+
+  <div class="grid">
+    <label>Minimum score <small>(0-100)</small>
+      <input type="number" id="minScore" value="50" min="0" max="100" /></label>
+    <label>Minimum CGPA <small>(out of 10, 0 = ignore)</small>
+      <input type="number" id="minCgpa" value="0" min="0" max="10" step="0.1" /></label>
+    <label>Resumes <small>(PDF, up to 50)</small>
+      <input type="file" id="files" accept=".pdf" multiple /></label>
+  </div>
+
+  <button class="primary" id="btn" onclick="rank()">Rank resumes</button>
+  <button class="primary" id="btnPdf" onclick="downloadReport()" style="display:none">Download report (PDF)</button>
+  <button id="btnCsv" onclick="downloadCsv()" style="display:none">Download spreadsheet (CSV)</button>
+
+  </section>
+
+  <p id="status"></p>
+  <div id="result"></div>
+
+  <script>
+    let lastResult = null;
+    let lastCriteria = {};
+
+    function el(tag, text, cls) {
+      const e = document.createElement(tag);
+      if (text !== undefined) e.textContent = text;
+      if (cls) e.className = cls;
+      return e;
+    }
+
+    function chips(items, cls) {
+      const d = el("div");
+      (items || []).forEach(i => d.appendChild(el("span", i, "chip " + cls)));
+      return d;
+    }
+
+    function candidateCell(c) {
+      const td = el("td");
+      td.appendChild(el("strong", c.name));
+      if (c.email) td.appendChild(el("div", c.email, "muted"));
+      td.appendChild(el("div", c.filename, "muted"));
+      return td;
+    }
+
+    function scoreCell(c) {
+      const td = el("td");
+      td.appendChild(el("div", String(c.overall), "big"));
+      td.appendChild(el("div", "fit " + c.fit + " | strength " + c.strength, "muted"));
+      return td;
+    }
+
+    function skillsCell(c) {
+      const td = el("td");
+      td.appendChild(chips(c.matched_skills, "ok"));
+      td.appendChild(chips(c.missing_skills, "miss"));
+      return td;
+    }
+
+    function table(headers) {
+      const t = el("table");
+      const tr = el("tr");
+      headers.forEach(h => tr.appendChild(el("th", h)));
+      t.appendChild(tr);
+      return t;
+    }
+
+    function render(data) {
+      const result = document.getElementById("result");
+      result.innerHTML = "";
+      const s = data.summary;
+
+      const sum = el("div", undefined, "box");
+      sum.appendChild(el("strong",
+        s.total + " resumes: " + s.shortlisted + " shortlisted, " +
+        s.not_shortlisted + " not shortlisted, " + s.unreadable + " could not be read"));
+      sum.appendChild(el("div",
+        "This ranking is a decision aid. Please review the resumes yourself before rejecting anyone.", "muted"));
+      result.appendChild(sum);
+      if (data.warning) result.appendChild(el("p", data.warning, "hint"));
+      if (data.ai_note) result.appendChild(el("p", data.ai_note, "muted"));
+
+      const selected = data.candidates.filter(c => c.selected);
+      const rejected = data.candidates.filter(c => !c.selected);
+
+      result.appendChild(el("h2", "Shortlisted (best first)"));
+      if (selected.length === 0) {
+        result.appendChild(el("p", "Nobody met all the conditions. Try lowering the minimum score or removing a must-have."));
+      } else {
+        const t = table(["#", "Candidate", "Score", "Skills (green = has, red = missing)", "Notes"]);
+        selected.forEach(c => {
+          const tr = el("tr");
+          tr.appendChild(el("td", String(c.rank)));
+          tr.appendChild(candidateCell(c));
+          tr.appendChild(scoreCell(c));
+          tr.appendChild(skillsCell(c));
+          const notes = el("td");
+          c.flags.forEach(f => notes.appendChild(el("div", f, "flag")));
+          if (c.ai_summary) notes.appendChild(el("div", c.ai_summary, "ai"));
+          tr.appendChild(notes);
+          t.appendChild(tr);
+        });
+        result.appendChild(t);
+      }
+
+      if (rejected.length) {
+        result.appendChild(el("h2", "Not shortlisted"));
+        const t = table(["Candidate", "Score", "Skills (green = has, red = missing)", "Why not"]);
+        rejected.forEach(c => {
+          const tr = el("tr");
+          tr.appendChild(candidateCell(c));
+          tr.appendChild(scoreCell(c));
+          tr.appendChild(skillsCell(c));
+          const why = el("td");
+          c.reasons.forEach(r => why.appendChild(el("div", r, "reason")));
+          c.flags.forEach(f => why.appendChild(el("div", f, "flag")));
+          tr.appendChild(why);
+          t.appendChild(tr);
+        });
+        result.appendChild(t);
+      }
+
+      if (data.unreadable.length) {
+        result.appendChild(el("h2", "Could not be read"));
+        const ul = el("ul");
+        data.unreadable.forEach(u => ul.appendChild(el("li", u.filename + ": " + u.reason)));
+        result.appendChild(ul);
+      }
+    }
+
+    async function rank() {
+      const jd = document.getElementById("jd").value.trim();
+      const files = document.getElementById("files").files;
+      const status = document.getElementById("status");
+      if (!jd) { alert("Paste a job description first"); return; }
+      if (files.length === 0) { alert("Choose at least one PDF"); return; }
+      if (files.length > 50) { alert("Please choose at most 50 resumes"); return; }
+
+      const must = document.getElementById("must").value.trim();
+      const minScore = parseInt(document.getElementById("minScore").value) || 0;
+      const minCgpa = parseFloat(document.getElementById("minCgpa").value) || 0;
+
+      const form = new FormData();
+      form.append("job_description", jd);
+      form.append("must_have", must);
+      form.append("min_score", minScore);
+      form.append("min_cgpa", minCgpa);
+      for (const f of files) form.append("files", f);
+
+      const btn = document.getElementById("btn");
+      btn.disabled = true;
+      status.className = "";
+      status.textContent = "Reading " + files.length + " resumes... this can take up to a minute";
+      document.getElementById("result").innerHTML = "";
+      document.getElementById("btnPdf").style.display = "none";
+      document.getElementById("btnCsv").style.display = "none";
+
+      try {
+        const res = await fetch("/api/company/rank", { method: "POST", body: form });
+        const data = await res.json();
+        if (data.error || data.detail) {
+          status.className = "err";
+          status.textContent = data.error || ("Invalid request: " + JSON.stringify(data.detail));
+          return;
+        }
+        status.textContent = "";
+        lastResult = data;
+        lastCriteria = {
+          job_title: document.getElementById("jobTitle").value.trim(),
+          must_have: must,
+          min_score: minScore,
+          min_cgpa: minCgpa
+        };
+        render(data);
+        document.getElementById("btnPdf").style.display = "inline-block";
+        document.getElementById("btnCsv").style.display = "inline-block";
+      } catch (e) {
+        status.className = "err";
+        status.textContent = "Request failed: " + e;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function saveBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+
+    async function downloadReport() {
+      if (!lastResult) return;
+      const btn = document.getElementById("btnPdf");
+      const status = document.getElementById("status");
+      btn.disabled = true;
+      status.className = "";
+      status.textContent = "Building the PDF report...";
+      try {
+        const res = await fetch("/api/company/report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ result: lastResult, criteria: lastCriteria })
+        });
+        const type = res.headers.get("content-type") || "";
+        if (!res.ok || !type.includes("pdf")) {
+          let msg = "Could not build the PDF report.";
+          try { msg = (await res.json()).error || msg; } catch (e) {}
+          status.className = "err";
+          status.textContent = msg;
+          return;
+        }
+        status.textContent = "";
+        saveBlob(await res.blob(), "Shortlist_Report.pdf");
+      } catch (e) {
+        status.className = "err";
+        status.textContent = "Request failed: " + e;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function csvCell(v) {
+      let s = String(v === null || v === undefined ? "" : v);
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;   // stops Excel treating text as a formula
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+
+    function downloadCsv() {
+      if (!lastResult) return;
+      const rows = [["Rank", "Status", "Name", "Email", "File", "Overall", "Job fit",
+                     "Resume strength", "CGPA", "Matched skills", "Missing skills", "Reasons / flags"]];
+      lastResult.candidates.forEach(c => rows.push([
+        c.selected ? c.rank : "", c.selected ? "Shortlisted" : "Not shortlisted",
+        c.name, c.email, c.filename, c.overall, c.fit, c.strength, c.cgpa,
+        c.matched_skills.join("; "), c.missing_skills.join("; "),
+        c.reasons.concat(c.flags).join("; ")
+      ]));
+      const csv = "\ufeff" + rows.map(r => r.map(csvCell).join(",")).join("\r\n");
+      saveBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "shortlist.csv");
+    }
+  </script>
+
+    </div>
+  </main>
+</div>
+<script>Skillora.init({ active: "hiring", title: "Hiring AI", sub: "Screen bulk resumes and find the best candidates" });</script>
+</body>
+</html>

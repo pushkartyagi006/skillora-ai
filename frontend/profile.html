@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Profile · Skillora AI</title>
+  <link rel="icon" href="/assets/favicon.png" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/theme.css" />
+  <link rel="stylesheet" href="/assets/pages.css" />
+  <script src="/assets/app.js"></script>
+  <style>
+    .page { max-width: 860px; }
+    .cover { position: relative; height: 130px; border-radius: 20px 20px 0 0; overflow: hidden;
+             background: linear-gradient(120deg, var(--blue), var(--purple) 60%, var(--cyan)); }
+    .cover::before, .cover::after { content: ""; position: absolute; border-radius: 50%; background: rgba(255,255,255,.14); }
+    .cover::before { width: 260px; height: 260px; right: -70px; top: -130px; }
+    .cover::after { width: 150px; height: 150px; left: 30%; bottom: -90px; }
+    .idcard { margin-bottom: 18px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--shadow); }
+    .idbody { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 20px; padding: 0 26px 22px; }
+    .avatar { width: 96px; height: 96px; margin-top: -48px; flex: none; display: grid; place-items: center; border-radius: 50%;
+              border: 5px solid var(--surface); color: #fff; font-size: 40px; font-weight: 800; box-shadow: var(--shadow); }
+    .idtext { flex: 1 1 200px; padding-top: 10px; }
+    .idtext h2 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+    .idtext p { margin: 2px 0 0; color: var(--muted); font-size: 14px; }
+    .rolechip { display: inline-block; margin-top: 8px; padding: 3px 14px; border-radius: 99px; background: var(--tint); color: var(--blue); font-size: 12px; font-weight: 700; text-transform: capitalize; }
+    .swatches { display: flex; align-items: center; gap: 8px; padding-bottom: 6px; color: var(--muted); font-size: 12px; }
+    .sw { width: 26px; height: 26px; margin: 0 !important; padding: 0 !important; border-radius: 50% !important; border: 3px solid var(--surface) !important; box-shadow: 0 0 0 1px var(--line); }
+    .sw.on { box-shadow: 0 0 0 2px var(--blue); }
+
+    .tabs { display: flex; gap: 4px; margin-bottom: 18px; padding: 4px; border-radius: 14px; background: var(--tint); overflow-x: auto; }
+    .tabs button { flex: 1 1 0; margin: 0 !important; border: 0 !important; background: transparent !important; color: var(--muted) !important; white-space: nowrap; }
+    .tabs button.on { background: linear-gradient(135deg, var(--blue), var(--purple)) !important; color: #fff !important; }
+    .tabs .ic { width: 17px; height: 17px; }
+    .panel[hidden] { display: none; }
+
+    .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .ok-msg { color: var(--ok); font-size: 14px; margin: 10px 0 0; font-weight: 600; }
+    .err-msg { color: var(--bad); font-size: 14px; margin: 10px 0 0; }
+    .ok-msg:empty, .err-msg:empty { display: none; }
+    .page input[readonly] { opacity: .7; cursor: not-allowed; }
+
+    .fcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 8px; }
+    .mini { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--text); text-decoration: none; transition: .15s; }
+    .page a.mini { color: var(--text); }
+    .mini span { line-height: 1.4; }
+    .mini:hover { transform: translateY(-2px); border-color: var(--c); box-shadow: var(--shadow); }
+    .mini i { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 11px; background: color-mix(in srgb, var(--c) 14%, var(--surface)); color: var(--c); }
+    .mini strong { display: block; font-size: 14px; }
+    .mini span { color: var(--muted); font-size: 12px; }
+
+    .themes { display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+    .themeopt { flex: 1 1 140px; margin: 0 !important; padding: 14px !important; display: block !important; text-align: left; border-width: 2px !important; }
+    .themeopt .prev { height: 54px; margin-bottom: 8px; border-radius: 8px; border: 1px solid var(--line); }
+    .themeopt.on { border-color: var(--blue) !important; color: var(--blue) !important; }
+
+    .meter { height: 8px; margin-top: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+    .meter div { height: 100%; width: 0; border-radius: 99px; transition: width .25s, background .25s; }
+    .meter-label { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+
+    .danger { border-color: var(--bad) !important; }
+    .danger h3 { color: var(--bad); }
+    .btn-danger { border-color: var(--bad) !important; color: var(--bad) !important; }
+    .btn-danger:hover { background: var(--bad-bg) !important; }
+    @media (max-width: 700px) { .pair { grid-template-columns: 1fr; } .idbody { padding: 0 18px 18px; } }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside id="side" class="side"></aside>
+  <main class="main">
+    <header id="top" class="top"></header>
+    <div class="page">
+
+      <section class="idcard">
+        <div class="cover"></div>
+        <div class="idbody">
+          <div class="avatar" id="avatar">S</div>
+          <div class="idtext">
+            <h2 id="showName"></h2>
+            <p id="showEmail"></p>
+            <span class="rolechip" id="showRole"></span>
+          </div>
+          <div class="swatches"><span>Avatar colour</span><span id="swatches" style="display:flex;gap:8px"></span></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3 style="margin-bottom:2px">Quick start for you</h3>
+        <p class="muted" style="margin:0">Tools that suit your role.</p>
+        <div class="fcards" id="quick"></div>
+      </section>
+
+      <div class="tabs" id="tabs">
+        <button type="button" data-tab="account" class="on"></button>
+        <button type="button" data-tab="security"></button>
+        <button type="button" data-tab="look"></button>
+        <button type="button" data-tab="danger"></button>
+      </div>
+
+      <!-- ACCOUNT -->
+      <section class="card panel" id="tab-account">
+        <h3>Your details</h3>
+        <form id="detailsForm" novalidate>
+          <label>Full name <input type="text" id="name" autocomplete="name" /></label>
+          <div class="pair">
+            <label>Email <small>(cannot be changed)</small><input type="text" id="email" readonly /></label>
+            <label>I am a
+              <select id="role">
+                <option value="student">Student</option>
+                <option value="job seeker">Job seeker</option>
+                <option value="teacher">Teacher</option>
+                <option value="company">Company / recruiter</option>
+              </select>
+            </label>
+          </div>
+          <button class="primary" type="submit" id="saveBtn">Save changes</button>
+          <p class="ok-msg" id="detailsOk" role="status"></p>
+          <p class="err-msg" id="detailsErr" role="alert"></p>
+        </form>
+      </section>
+
+      <!-- SECURITY -->
+      <div class="panel" id="tab-security" hidden>
+        <section class="card">
+          <h3>Change password</h3>
+          <p class="muted">You stay logged in on this device. Other devices are logged out.</p>
+          <form id="pwForm" novalidate>
+            <label>Current password <input type="password" id="curPw" autocomplete="current-password" /></label>
+            <div class="pair">
+              <label>New password <small>(at least 6 characters)</small><input type="password" id="newPw" autocomplete="new-password" /></label>
+              <label>Repeat new password <input type="password" id="newPw2" autocomplete="new-password" /></label>
+            </div>
+            <div class="meter"><div id="meterBar"></div></div>
+            <p class="meter-label" id="meterLabel">Type a new password to see its strength.</p>
+            <button class="primary" type="submit" id="pwBtn">Update password</button>
+            <p class="ok-msg" id="pwOk" role="status"></p>
+            <p class="err-msg" id="pwErr" role="alert"></p>
+          </form>
+        </section>
+        <section class="card">
+          <h3>Log out everywhere</h3>
+          <p class="muted">Ends your session on every device, including this one. Use it if you used a shared computer.</p>
+          <button type="button" id="logoutAll">Log out of all devices</button>
+        </section>
+      </div>
+
+      <!-- LOOK -->
+      <section class="card panel" id="tab-look" hidden>
+        <h3>Appearance</h3>
+        <p class="muted">Pick how Skillora AI looks. It is remembered on this device.</p>
+        <div class="themes">
+          <button type="button" class="themeopt" data-theme="light"><div class="prev" style="background:linear-gradient(135deg,#F4F7FF 55%,#2563EB 55%)"></div>Light</button>
+          <button type="button" class="themeopt" data-theme="dark"><div class="prev" style="background:linear-gradient(135deg,#0B1020 55%,#7C3AED 55%)"></div>Dark</button>
+        </div>
+      </section>
+
+      <!-- DANGER -->
+      <section class="card danger panel" id="tab-danger" hidden>
+        <h3>Delete account</h3>
+        <p class="muted">This removes your account and logs you out everywhere. It cannot be undone.</p>
+        <form id="delForm" novalidate>
+          <label>Type your password to confirm <input type="password" id="delPw" autocomplete="current-password" /></label>
+          <button class="btn-danger" type="submit" id="delBtn">Delete my account</button>
+          <p class="err-msg" id="delErr" role="alert"></p>
+        </form>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const S = Skillora;
+  const HEAD = { active: "profile", title: "Profile", sub: "Manage your account" };
+
+  // which tools to suggest for each role
+  const QUICK = { student: ["resume", "interview", "project"], "job seeker": ["resume", "interview", "project"], teacher: ["teacher"], company: ["hiring"] };
+
+  function paint(u) {
+    $("avatar").textContent = u.name.trim()[0].toUpperCase();
+    $("avatar").style.background = S.avatarGradient();
+    $("showName").textContent = u.name;
+    $("showEmail").textContent = u.email;
+    $("showRole").textContent = u.role;
+    $("name").value = u.name;
+    $("email").value = u.email;
+    $("role").value = u.role;
+    const ids = QUICK[u.role] || ["resume"];
+    $("quick").innerHTML = S.FEATURES.filter((f) => ids.includes(f.id)).map((f) =>
+      `<a class="mini" href="${f.href}" style="--c:${f.color}"><i>${S.ic(f.icon)}</i><div><strong>${f.name}</strong><span>${f.desc}</span></div></a>`).join("");
+  }
+
+  // tabs
+  const TABS = { account: ["user", "Account"], security: ["shield", "Security"], look: ["palette", "Appearance"], danger: ["trash", "Delete"] };
+  document.querySelectorAll("#tabs button").forEach((b) => {
+    const [icon, label] = TABS[b.dataset.tab];
+    b.innerHTML = S.ic(icon) + label;
+    b.onclick = () => {
+      document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
+      document.querySelectorAll(".panel").forEach((p) => (p.hidden = p.id !== "tab-" + b.dataset.tab));
+    };
+  });
+
+  // avatar colour swatches
+  function drawSwatches() {
+    const cur = Number(localStorage.getItem("sk_avatar") || 0);
+    $("swatches").innerHTML = S.AVATARS.map((c, i) =>
+      `<button type="button" class="sw ${i === cur ? "on" : ""}" data-i="${i}" aria-label="Colour ${i + 1}" style="background:linear-gradient(135deg,${c[0]},${c[1]})"></button>`).join("");
+    $("swatches").querySelectorAll("button").forEach((b) => (b.onclick = () => {
+      localStorage.setItem("sk_avatar", b.dataset.i);
+      $("avatar").style.background = S.avatarGradient();
+      const chip = document.querySelector(".userchip i");
+      if (chip) chip.style.background = S.avatarGradient();
+      drawSwatches();
+    }));
+  }
+  drawSwatches();
+
+  // theme buttons
+  function paintThemeOpts() {
+    document.querySelectorAll(".themeopt").forEach((b) => b.classList.toggle("on", b.dataset.theme === document.documentElement.dataset.theme));
+  }
+  document.querySelectorAll(".themeopt").forEach((b) => (b.onclick = () => { S.setTheme(b.dataset.theme); paintThemeOpts(); }));
+  paintThemeOpts();
+
+  // password strength
+  $("newPw").addEventListener("input", () => {
+    const p = $("newPw").value;
+    let score = 0;
+    if (p.length >= 6) score++;
+    if (p.length >= 10) score++;
+    if (/[A-Z]/.test(p) && /[a-z]/.test(p)) score++;
+    if (/\d/.test(p)) score++;
+    if (/[^A-Za-z0-9]/.test(p)) score++;
+    if (!p) { $("meterBar").style.width = "0"; $("meterLabel").textContent = "Type a new password to see its strength."; return; }
+    const lv = [["Too short", "var(--bad)"], ["Weak", "var(--bad)"], ["Okay", "var(--warn)"], ["Good", "var(--ok)"], ["Strong", "var(--ok)"], ["Very strong", "var(--ok)"]][p.length < 6 ? 0 : score];
+    $("meterBar").style.width = (p.length < 6 ? 12 : score * 20) + "%";
+    $("meterBar").style.background = lv[1];
+    $("meterLabel").textContent = lv[0];
+  });
+
+  S.init(HEAD).then((u) => { if (u) paint(u); });
+
+  $("detailsForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    $("detailsOk").textContent = ""; $("detailsErr").textContent = "";
+    $("saveBtn").disabled = true;
+    try {
+      const d = await S.api("/api/auth/profile", { name: $("name").value, role: $("role").value }, "PUT");
+      if (d.error) { $("detailsErr").textContent = d.error; return; }
+      paint(d.user);
+      await S.init(HEAD);
+      $("detailsOk").textContent = "Saved.";
+    } catch (err) {
+      $("detailsErr").textContent = "Cannot reach the server. Check that it is running.";
+    } finally { $("saveBtn").disabled = false; }
+  });
+
+  $("pwForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    $("pwOk").textContent = ""; $("pwErr").textContent = "";
+    if ($("newPw").value !== $("newPw2").value) { $("pwErr").textContent = "The two new passwords do not match."; return; }
+    $("pwBtn").disabled = true;
+    try {
+      const d = await S.api("/api/auth/password", { current: $("curPw").value, new: $("newPw").value });
+      if (d.error) { $("pwErr").textContent = d.error; return; }
+      $("pwOk").textContent = "Password updated.";
+      $("pwForm").reset();
+      $("newPw").dispatchEvent(new Event("input"));
+    } catch (err) {
+      $("pwErr").textContent = "Cannot reach the server. Check that it is running.";
+    } finally { $("pwBtn").disabled = false; }
+  });
+
+  $("logoutAll").onclick = async () => {
+    if (!confirm("Log out of every device, including this one?")) return;
+    try { await S.api("/api/auth/logout-all", {}); } catch (e) {}
+    localStorage.removeItem("sk_token");
+    location.replace("/login.html");
+  };
+
+  $("delForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    $("delErr").textContent = "";
+    if (!$("delPw").value) { $("delErr").textContent = "Type your password first."; return; }
+    if (!confirm("Delete your account permanently?")) return;
+    $("delBtn").disabled = true;
+    try {
+      const d = await S.api("/api/auth/delete", { password: $("delPw").value });
+      if (d.error) { $("delErr").textContent = d.error; return; }
+      localStorage.removeItem("sk_token");
+      location.replace("/login.html#signup");
+    } catch (err) {
+      $("delErr").textContent = "Cannot reach the server. Check that it is running.";
+    } finally { $("delBtn").disabled = false; }
+  });
+</script>
+</body>
+</html>

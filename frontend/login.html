@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Log in · Skillora AI</title>
+  <link rel="icon" href="/assets/favicon.png" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/theme.css" />
+  <script src="/assets/app.js"></script>
+</head>
+<body>
+  <div class="auth">
+    <section class="auth-brand">
+      <div class="logo"><img src="/assets/logo.png" alt="" /><span class="wordmark">Skillora <b>AI</b></span></div>
+      <div>
+        <h1>Build your skills.<br />Shape your future.</h1>
+        <p>Resume checks, interview practice, project reviews and hiring tools in one place.</p>
+        <div class="roles"><span>Students</span><span>Teachers</span><span>Companies</span><span>Job seekers</span></div>
+      </div>
+      <p>Intelligence for Skills, Projects &amp; Careers</p>
+    </section>
+
+    <section class="auth-form">
+      <button class="iconbtn" data-theme-toggle></button>
+      <h2 id="title">Welcome back</h2>
+      <p class="sub" id="sub">Log in to continue your journey.</p>
+
+      <div class="tabs" role="tablist">
+        <button id="tabLogin" class="on" type="button">Log in</button>
+        <button id="tabSignup" type="button">Create account</button>
+      </div>
+
+      <form id="form" novalidate>
+        <label class="field" id="nameRow" hidden><span>Full name</span><input id="name" autocomplete="name" /></label>
+        <label class="field"><span>Email</span><input id="email" type="email" autocomplete="email" /></label>
+        <label class="field" id="roleRow" hidden><span>I am a</span>
+          <select id="role">
+            <option value="student">Student</option>
+            <option value="job seeker">Job seeker</option>
+            <option value="teacher">Teacher</option>
+            <option value="company">Company / recruiter</option>
+          </select>
+        </label>
+        <label class="field"><span>Password</span><input id="password" type="password" autocomplete="current-password" /></label>
+        <p class="msg" id="msg" role="alert"></p>
+        <button class="btn block" id="go" type="submit">Log in</button>
+      </form>
+    </section>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let mode = "login";
+
+    function setMode(m) {
+      mode = m;
+      const signup = m === "signup";
+      $("tabLogin").classList.toggle("on", !signup);
+      $("tabSignup").classList.toggle("on", signup);
+      $("nameRow").hidden = !signup;
+      $("roleRow").hidden = !signup;
+      $("title").textContent = signup ? "Create your account" : "Welcome back";
+      $("sub").textContent = signup ? "It takes less than a minute." : "Log in to continue your journey.";
+      $("go").textContent = signup ? "Create account" : "Log in";
+      $("password").autocomplete = signup ? "new-password" : "current-password";
+      $("msg").textContent = "";
+      history.replaceState(null, "", signup ? "#signup" : "#");
+    }
+    $("tabLogin").onclick = () => setMode("login");
+    $("tabSignup").onclick = () => setMode("signup");
+    if (location.hash === "#signup") setMode("signup");
+    if (Skillora.token()) location.replace("/home.html");
+
+    $("form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const msg = $("msg"), btn = $("go");
+      msg.textContent = "";
+      const body = { email: $("email").value, password: $("password").value };
+      if (mode === "signup") { body.name = $("name").value; body.role = $("role").value; }
+      btn.disabled = true;
+      try {
+        const d = await Skillora.api("/api/auth/" + mode, body);
+        if (d.error) { msg.textContent = d.error; return; }
+        localStorage.setItem("sk_token", d.token);
+        location.replace("/home.html");
+      } catch (err) {
+        msg.textContent = "Cannot reach the server. Check that it is running.";
+      } finally { btn.disabled = false; }
+    });
+  </script>
+</body>
+</html>

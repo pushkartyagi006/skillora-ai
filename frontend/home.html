@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Home · Skillora AI</title>
+  <link rel="icon" href="/assets/favicon.png" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/theme.css" />
+  <script src="/assets/app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside id="side" class="side"></aside>
+    <main class="main">
+      <header id="top" class="top"></header>
+
+      <section class="herobox">
+        <div>
+          <h2>AI-powered career and learning assistant</h2>
+          <p>Get personalized insights, improve your skills and reach your goals with Skillora AI.</p>
+          <a class="btn" href="#features">Explore all features</a>
+        </div>
+        <div class="steps" aria-hidden="true"><div></div><div></div><div></div><div></div><div></div></div>
+      </section>
+
+      <h3 class="sec" id="features">Quick access</h3>
+      <div class="fcards" id="cards"></div>
+    </main>
+  </div>
+
+  <script>
+    Skillora.init({ active: "home", title: "Welcome", sub: "Your growth. Our AI. Endless possibilities." }).then((u) => {
+      if (!u) return;
+      const h = new Date().getHours();
+      const part = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+      document.querySelector("#top h1").textContent = part + ", " + u.name.split(" ")[0];
+      document.getElementById("cards").innerHTML = Skillora.FEATURES.map((f) =>
+        `<a class="fcard" href="${f.href}" style="--c:${f.color}"><div class="fbadge">${Skillora.ic(f.icon)}</div><strong>${f.name}</strong><span>${f.desc}</span></a>`
+      ).join("");
+    });
+  </script>
+</body>
+</html>

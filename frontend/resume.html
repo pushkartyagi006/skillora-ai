@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Resume AI · Skillora AI</title>
+  <link rel="icon" href="/assets/favicon.png" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/theme.css" />
+  <link rel="stylesheet" href="/assets/pages.css" />
+  <script src="/assets/app.js"></script>
+  <style>
+    .row { margin: 12px 0; }
+    .page > h3 { margin: 18px 0 4px; }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside id="side" class="side"></aside>
+  <main class="main">
+    <header id="top" class="top"></header>
+    <div class="page">
+<div class="subnav"><a href="/resume.html" class="on">Check my resume</a><a href="/builder.html">Build a resume</a></div>
+
+  <section class="card formcard">
+  <h3>1. Paste the job description</h3>
+  <textarea id="jd" rows="8" placeholder="Paste the job description here"></textarea>
+
+  <h3>2. Job title <small>(optional, shown on the PDF report)</small></h3>
+  <input type="text" id="jobTitle" placeholder="for example: Software Engineer" />
+
+  <h3>3. Upload your resume (PDF)</h3>
+  <input type="file" id="file" accept=".pdf" />
+  <button class="primary" id="goBtn" onclick="analyze()">Analyze resume</button>
+
+  </section>
+
+  <p id="status"></p>
+  <div id="result"></div>
+
+  <script>
+    function el(tag, text, cls) {
+      const e = document.createElement(tag);
+      if (text !== undefined) e.textContent = text;
+      if (cls) e.className = cls;
+      return e;
+    }
+
+    function matchLabel(n) {
+      return n >= 75 ? "Strong match" : n >= 50 ? "Moderate match" : n >= 30 ? "Weak match" : "Poor match";
+    }
+
+    function listBox(title, items) {
+      const box = el("div", undefined, "box");
+      box.appendChild(el("h3", title));
+      const ul = el("ul");
+      (items || []).forEach(i => ul.appendChild(el("li", i)));
+      box.appendChild(ul);
+      return box;
+    }
+
+    function chipsBox(title, items, cls) {
+      const box = el("div", undefined, "box");
+      box.appendChild(el("h3", title));
+      if (!items || items.length === 0) box.appendChild(el("p", "None"));
+      (items || []).forEach(i => box.appendChild(el("span", i, "chip " + cls)));
+      return box;
+    }
+
+    function scoreBox(scores) {
+      const box = el("div", undefined, "box");
+      box.appendChild(el("h3", "Overall score"));
+      box.appendChild(el("p", scores.overall + " / 100", "overall"));
+      box.appendChild(el("p", matchLabel(scores.overall), "matchlabel"));
+      box.appendChild(el("p",
+        "Overall = Job fit x (0.7 + 0.3 x Resume strength). " +
+        "A resume that does not fit the job cannot score high, however well it is written.",
+        "note"));
+
+      function addBar(label, b) {
+        const row = el("div", undefined, "row");
+        row.appendChild(el("strong", label + ": " + b.score + " / 100"));
+        const bar = el("div", undefined, "bar");
+        const fill = el("div", undefined, "fill");
+        fill.style.width = b.score + "%";
+        bar.appendChild(fill);
+        row.appendChild(bar);
+        row.appendChild(el("p", b.note, "note"));
+        box.appendChild(row);
+      }
+
+      const b = scores.breakdown;
+      addBar("Job fit (this resume vs this job)", b.fit);
+      box.appendChild(el("h3", "Resume strength: " + scores.strength + " / 100 (independent of the job)"));
+      addBar("Experience & projects", b.experience);
+      addBar("Education", b.education);
+      addBar("Resume quality", b.quality);
+      return box;
+    }
+
+    /* ---------- PDF report ---------- */
+    let pdfUrl = null;
+
+    function pdfRow() {
+      const box = el("div", undefined, "box");
+      const view = el("a", "View PDF report", "btn primary disabled"); view.id = "viewPdf"; view.target = "_blank";
+      const dl = el("a", "Download PDF report", "btn disabled"); dl.id = "downloadPdf";
+      box.appendChild(view);
+      box.appendChild(dl);
+      const st = el("p", "", "note"); st.id = "pdfStatus";
+      box.appendChild(st);
+      return box;
+    }
+
+    async function preparePdf(data, jobTitle, fileName) {
+      const status = document.getElementById("pdfStatus");
+      if (!status) return;
+      status.className = "note";
+      status.textContent = "Preparing your PDF...";
+      try {
+        const res = await fetch("/api/check/report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ result: data, job_title: jobTitle, file_name: fileName })
+        });
+        const type = res.headers.get("content-type") || "";
+        if (!res.ok || !type.includes("pdf")) {
+          let msg = "Could not build the PDF.";
+          try { msg = (await res.json()).error || msg; } catch (e) {}
+          throw new Error(msg);
+        }
+        if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+        pdfUrl = URL.createObjectURL(await res.blob());
+        const view = document.getElementById("viewPdf"), dl = document.getElementById("downloadPdf");
+        view.href = pdfUrl;
+        dl.href = pdfUrl;
+        dl.download = "Resume_Check_Report.pdf";
+        view.classList.remove("disabled");
+        dl.classList.remove("disabled");
+        status.textContent = "";
+      } catch (e) {
+        status.className = "note err";
+        status.textContent = e.message + " ";
+        const retry = el("button", "Try again");
+        retry.onclick = () => preparePdf(data, jobTitle, fileName);
+        status.appendChild(retry);
+      }
+    }
+
+    async function analyze() {
+      const f = document.getElementById("file").files[0];
+      const jd = document.getElementById("jd").value.trim();
+      const jobTitle = document.getElementById("jobTitle").value.trim();
+      const status = document.getElementById("status");
+      const result = document.getElementById("result");
+      const btn = document.getElementById("goBtn");
+      result.innerHTML = "";
+
+      if (!jd) { alert("Paste a job description first"); return; }
+      if (!f) { alert("Choose a PDF first"); return; }
+
+      const form = new FormData();
+      form.append("file", f);
+      form.append("job_description", jd);
+
+      btn.disabled = true;
+      status.className = "";
+      status.textContent = "Analyzing... this can take 10-30 seconds";
+
+      try {
+        const res = await fetch("/api/analyze", { method: "POST", body: form });
+        const data = await res.json();
+        if (data.error) {
+          status.className = "err";
+          status.textContent = data.error;
+          return;
+        }
+        status.textContent = "";
+
+        result.appendChild(pdfRow());
+        result.appendChild(scoreBox(data.scores));
+        result.appendChild(chipsBox("Matched skills", data.scores.matched_skills, "ok"));
+        result.appendChild(chipsBox("Missing skills", data.scores.missing_skills, "miss"));
+
+        if (data.ai_error) {
+          result.appendChild(el("p", data.ai_error, "err"));
+        } else {
+          const s = el("div", undefined, "box");
+          s.appendChild(el("h3", "AI summary"));
+          s.appendChild(el("p", data.match_summary));
+          result.appendChild(s);
+          result.appendChild(listBox("Strengths", data.strengths));
+          result.appendChild(listBox("Weaknesses", data.weaknesses));
+          result.appendChild(listBox("Suggestions", data.suggestions));
+        }
+        preparePdf(data, jobTitle, f.name);
+      } catch (e) {
+        status.className = "err";
+        status.textContent = "Request failed: " + e;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+
+    </div>
+  </main>
+</div>
+<script>Skillora.init({ active: "resume", title: "Resume AI", sub: "Check your resume against a job description" });</script>
+</body>
+</html>

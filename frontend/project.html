@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Project AI · Skillora AI</title>
+  <link rel="icon" href="/assets/favicon.png" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/theme.css" />
+  <link rel="stylesheet" href="/assets/pages.css" />
+  <script src="/assets/app.js"></script>
+  <style>
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .chips { margin-top: 6px; }
+    #answer { min-height: 150px; }
+    @media (max-width: 700px) { .row, .row3 { grid-template-columns: 1fr; } }
+    .hero { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+    .bar > div { height: 100%; }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside id="side" class="side"></aside>
+  <main class="main">
+    <header id="top" class="top"></header>
+    <div class="page">
+
+
+  <div class="inner">
+    <!-- ================= FORM ================= -->
+    <section id="form" class="card">
+      <h1>How strong is your project?</h1>
+      <p class="muted">Describe your project (or upload its report or README). You get an honest score with proof from your own text, a roadmap to improve it, and interview questions with sample answers.</p>
+
+      <div class="row">
+        <label>Project title
+          <input type="text" id="title" placeholder="for example: SmartCrop" /></label>
+        <label>Tech stack
+          <input type="text" id="tech" placeholder="for example: Python, TensorFlow, Flask, React" /></label>
+      </div>
+
+      <label>Describe the project <small>(what problem, for whom, how it works, results)</small>
+        <textarea id="description" rows="6" placeholder="The more real detail you give, the fairer the score. Mention data, models, results and who will use it."></textarea></label>
+      <div class="muted" id="count">0 characters (minimum 60)</div>
+
+      <label>What did you build yourself? <small>(optional but important)</small>
+        <textarea id="contribution" rows="3" placeholder="For example: I trained the model, wrote the API, designed the interface"></textarea></label>
+
+      <div class="row">
+        <label>Team size <small>(optional)</small>
+          <input type="text" id="team" placeholder="for example: 2" /></label>
+        <label>README or report <small>(optional PDF, TXT or MD)</small>
+          <input type="file" id="file" accept=".pdf,.txt,.md" /></label>
+      </div>
+
+      <label>More details <small>(optional: paste README, results table, notes)</small>
+        <textarea id="extra" rows="3"></textarea></label>
+
+      <label>Tick what is true <small>(counts as half credit until your text shows it)</small></label>
+      <div class="ticks">
+        <label class="tick"><input type="checkbox" id="deployed" /> Deployed or live demo</label>
+        <label class="tick"><input type="checkbox" id="tests" /> Has tests</label>
+        <label class="tick"><input type="checkbox" id="git" /> Uses Git or GitHub</label>
+        <label class="tick"><input type="checkbox" id="has_ui" /> Has a user interface</label>
+        <label class="tick"><input type="checkbox" id="has_visuals" /> Has screenshots or demo video</label>
+      </div>
+
+      <p class="muted">Your text is sent to the free Gemini tier. Do not include private or sensitive information.</p>
+      <button class="primary" id="go">Analyze my project</button>
+      <p id="formErr" class="err"></p>
+    </section>
+
+    <!-- ================= LOADING ================= -->
+    <section id="loading" class="card" hidden>
+      <div class="spinner"></div>
+      <p id="loadMsg" style="text-align:center"></p>
+    </section>
+
+    <!-- ================= RESULT ================= -->
+    <div id="result" hidden>
+      <section class="card" id="heroCard"></section>
+      <section class="card" id="dimsCard"></section>
+      <section class="card" id="checkCard"></section>
+      <section class="card" id="swCard"></section>
+
+      <section class="card" id="prepCard">
+        <div id="prepLoading"><div class="spinner"></div><p style="text-align:center">Building your roadmap and interview questions...</p></div>
+        <div id="prepErr" class="err" hidden></div>
+        <div id="prepBody" hidden></div>
+      </section>
+
+      <section class="card">
+        <h2>Report</h2>
+        <a class="btn primary disabled" id="viewPdf" target="_blank" rel="noopener">View PDF</a>
+        <a class="btn disabled" id="downloadPdf">Download PDF</a>
+        <a class="btn" href="/interview.html">Practise answers in Interview Arena</a>
+        <button id="again">Analyze another project</button>
+        <p id="pdfStatus" class="muted"></p>
+        <p class="muted">Scores are a practice aid. They estimate how well the project is presented and do not predict marks or interview results.</p>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    function el(tag, text, cls) {
+      const e = document.createElement(tag);
+      if (text !== undefined && text !== null) e.textContent = text;
+      if (cls) e.className = cls;
+      return e;
+    }
+    function show(which) {
+      $("form").hidden = which !== "form";
+      $("loading").hidden = which !== "loading";
+      $("result").hidden = which !== "result";
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    const colorFor = n => n >= 70 ? "var(--green)" : n >= 50 ? "var(--amber)" : "var(--red)";
+    const LEVEL_COLOR = { Standout: "#1b5e20", Strong: "#2e7d32", Developing: "#b26a00", Basic: "#b00020" };
+    const TYPE_TEXT = {
+      tutorial_clone: "Common beginner project", common_idea: "Popular idea",
+      solid_original: "Solid original work", distinctive: "Distinctive idea"
+    };
+    const VERDICT = { yes: ["Shown", "good"], partly: ["Partly", "warn"], no: ["Not shown", "bad"] };
+
+    let state = null;      // analysis result, later merged with roadmap, questions and tips
+    let pdfUrl = null;
+
+    $("description").addEventListener("input", () => {
+      const n = $("description").value.trim().length;
+      $("count").textContent = n + " characters (minimum 60)";
+      $("count").className = n >= 60 ? "muted good" : "muted";
+    });
+
+    $("go").onclick = analyze;
+    $("again").onclick = () => { state = null; $("formErr").textContent = ""; show("form"); };
+
+    async function analyze() {
+      $("formErr").textContent = "";
+      if ($("description").value.trim().length < 60) {
+        $("formErr").textContent = "Please describe your project in at least 60 characters.";
+        return;
+      }
+      const fd = new FormData();
+      ["title", "tech", "description", "contribution", "extra"].forEach(k => fd.append(k, $(k).value));
+      fd.append("team_size", $("team").value);
+      ["deployed", "tests", "git", "has_ui", "has_visuals"].forEach(k => fd.append(k, $(k).checked ? "1" : ""));
+      if ($("file").files[0]) fd.append("file", $("file").files[0]);
+
+      $("loadMsg").textContent = "Reading your project and checking it against 15 points. This takes 10 to 30 seconds...";
+      show("loading");
+      try {
+        const res = await fetch("/api/project/analyze", { method: "POST", body: fd });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        state = data;
+        render(data);
+        show("result");
+        prepare();
+      } catch (e) {
+        show("form");
+        $("formErr").textContent = e.message || "Something went wrong. Please try again.";
+      }
+    }
+
+    // ---------------------------------------------------------------- results
+    function barRow(label, value, note) {
+      const r = el("div", undefined, "r");
+      const l = el("div", undefined, "lbl");
+      l.appendChild(el("span", label));
+      const v = el("span", String(value));
+      v.style.color = colorFor(value);
+      l.appendChild(v);
+      r.appendChild(l);
+      const b = el("div", undefined, "bar");
+      const f = document.createElement("div");
+      f.style.width = Math.max(0, Math.min(100, value)) + "%";
+      f.style.background = colorFor(value);
+      b.appendChild(f);
+      r.appendChild(b);
+      if (note) r.appendChild(el("div", note, "muted"));
+      return r;
+    }
+    function listBlock(title, items, cls) {
+      if (!items || !items.length) return null;
+      const d = document.createElement("div");
+      d.appendChild(el("div", title, cls));
+      const ul = el("ul", undefined, "plain");
+      items.forEach(x => ul.appendChild(el("li", x)));
+      d.appendChild(ul);
+      return d;
+    }
+    function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+    function render(d) {
+      const hero = $("heroCard"); clear(hero);
+      hero.appendChild(el("h1", d.title));
+      const row = el("div", undefined, "hero");
+      const sc = el("div", String(d.overall), "bigscore");
+      sc.style.color = colorFor(d.overall);
+      row.appendChild(sc);
+      const side = document.createElement("div");
+      const lv = el("span", d.level, "level");
+      lv.style.background = LEVEL_COLOR[d.level] || "var(--navy)";
+      side.appendChild(lv);
+      side.appendChild(el("span", TYPE_TEXT[d.project_type] || "", "tag"));
+      side.appendChild(el("div", "out of 100", "muted"));
+      row.appendChild(side);
+      hero.appendChild(row);
+      hero.appendChild(el("p", d.level_note));
+      if (d.summary) hero.appendChild(el("p", d.summary));
+      if (d.project_type_reason) hero.appendChild(el("p", "Project type: " + d.project_type_reason, "muted"));
+      if (d.api_wrapper) {
+        hero.appendChild(el("div", "Your text does not show much work of your own beyond calling ready-made services. Describe what you built or trained yourself, or add such a part.", "notice"));
+      }
+
+      const dims = $("dimsCard"); clear(dims);
+      dims.appendChild(el("h2", "Score by area"));
+      const bars = el("div", undefined, "bars");
+      d.dimensions.forEach(x => bars.appendChild(barRow(x.name, x.score, x.points + " of " + x.max + " points")));
+      dims.appendChild(bars);
+
+      const chk = $("checkCard"); clear(chk);
+      chk.appendChild(el("h2", "Checklist with proof"));
+      chk.appendChild(el("p", "Every \"Shown\" has a line quoted from your own text. If the AI could not point to a real line, the item got no credit.", "muted"));
+      const wrap = el("div", undefined, "tablewrap");
+      const t = el("table", undefined, "chk");
+      const head = document.createElement("tr");
+      ["Item", "Result", "Points", "Evidence"].forEach(h => head.appendChild(el("th", h)));
+      t.appendChild(head);
+      d.items.forEach(it => {
+        const tr = document.createElement("tr");
+        tr.appendChild(el("td", it.label));
+        const vt = VERDICT[it.verdict] || VERDICT.no;
+        tr.appendChild(el("td", vt[0], vt[1]));
+        tr.appendChild(el("td", it.points + " / " + it.weight));
+        let ev = it.quote ? "\"" + it.quote + "\"" : (it.note || "-");
+        if (it.source === "self") ev = "Self-reported (you ticked it, not checked)";
+        tr.appendChild(el("td", ev, "proof"));
+        t.appendChild(tr);
+      });
+      wrap.appendChild(t);
+      chk.appendChild(wrap);
+
+      const sw = $("swCard"); clear(sw);
+      sw.appendChild(el("h2", "Strengths and gaps"));
+      [listBlock("What is working", d.strengths, "good"), listBlock("What is missing", d.gaps, "warn")]
+        .forEach(x => { if (x) sw.appendChild(x); });
+    }
+
+    // ---------------------------------------------------------------- roadmap + questions
+    const EFFORT = { small: "Small (under half a day)", medium: "Medium (1 to 3 days)", large: "Large (several days)" };
+
+    async function prepare() {
+      $("prepLoading").hidden = false; $("prepErr").hidden = true; $("prepBody").hidden = true;
+      $("viewPdf").classList.add("disabled"); $("downloadPdf").classList.add("disabled");
+      try {
+        const res = await fetch("/api/project/prep", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ facts: state.facts, items: state.items })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        state.roadmap = data.roadmap; state.questions = data.questions; state.look_tips = data.look_tips;
+        renderPrep(data);
+        $("prepLoading").hidden = true; $("prepBody").hidden = false;
+      } catch (e) {
+        $("prepLoading").hidden = true;
+        const box = $("prepErr"); clear(box);
+        box.hidden = false;
+        box.appendChild(document.createTextNode((e.message || "Could not build the roadmap.") + " "));
+        const retry = el("button", "Try again");
+        retry.onclick = prepare;
+        box.appendChild(retry);
+      }
+      preparePdf();   // the PDF works even if the roadmap failed
+    }
+
+    function renderPrep(d) {
+      const body = $("prepBody"); clear(body);
+      body.appendChild(el("h2", "Improvement roadmap"));
+      body.appendChild(el("p", "Ordered by how many points each fix could add, calculated from your checklist.", "muted"));
+      d.roadmap.forEach((r, i) => {
+        const s = el("div", undefined, "step");
+        s.appendChild(el("h3", (i + 1) + ". " + r.title));
+        let meta = "Effort: " + (EFFORT[r.effort] || r.effort);
+        if (r.gain) meta += "  |  Could add about " + r.gain + " points";
+        if (r.fixes_label) meta += "  |  Fixes: " + r.fixes_label;
+        s.appendChild(el("div", meta, "muted"));
+        if (r.why) s.appendChild(el("p", r.why));
+        if (r.how.length) {
+          const ol = el("ol", undefined, "plain");
+          r.how.forEach(h => ol.appendChild(el("li", h)));
+          s.appendChild(ol);
+        }
+        body.appendChild(s);
+      });
+
+      if (d.look_tips.length) {
+        body.appendChild(el("h2", "Make it look professional")).style.marginTop = "18px";
+        const ul = el("ul", undefined, "plain");
+        d.look_tips.forEach(x => ul.appendChild(el("li", x)));
+        body.appendChild(ul);
+      }
+
+      if (d.questions.length) {
+        const h = el("h2", "Interview questions on this project");
+        h.style.marginTop = "18px";
+        body.appendChild(h);
+        body.appendChild(el("p", "Sample answers use only facts from your text. Anything in [square brackets] needs your own real details. Never memorise an answer that is not true for you.", "muted"));
+        d.questions.forEach((q, i) => {
+          const det = el("details", undefined, "q");
+          det.appendChild(el("summary", "Q" + (i + 1) + " | " + q.category + " | " + q.difficulty + " | " + q.question));
+          if (q.key_points.length) {
+            const kp = document.createElement("p");
+            kp.appendChild(el("strong", "A good answer covers: "));
+            kp.appendChild(document.createTextNode(q.key_points.join("; ")));
+            det.appendChild(kp);
+          }
+          if (q.sample_answer) {
+            const bb = el("div", undefined, "better");
+            bb.appendChild(el("strong", "Sample answer: "));
+            bb.appendChild(document.createTextNode(q.sample_answer));
+            det.appendChild(bb);
+          }
+          body.appendChild(det);
+        });
+      }
+    }
+
+    // ---------------------------------------------------------------- PDF
+    async function preparePdf() {
+      const status = $("pdfStatus");
+      status.className = "muted";
+      status.textContent = "Preparing your PDF...";
+      const report = Object.assign({}, state);
+      delete report.facts;
+      try {
+        const res = await fetch("/api/project/report", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ report })
+        });
+        const type = res.headers.get("content-type") || "";
+        if (!res.ok || !type.includes("pdf")) {
+          let msg = "Could not build the PDF.";
+          try { msg = (await res.json()).error || msg; } catch (e) {}
+          throw new Error(msg);
+        }
+        if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+        pdfUrl = URL.createObjectURL(await res.blob());
+        const view = $("viewPdf"), dl = $("downloadPdf");
+        view.href = pdfUrl;
+        dl.href = pdfUrl;
+        dl.download = "Project_Analysis_Report.pdf";
+        view.classList.remove("disabled");
+        dl.classList.remove("disabled");
+        status.textContent = "";
+      } catch (e) {
+        status.className = "err";
+        status.textContent = e.message + " ";
+        const retry = el("button", "Try again");
+        retry.onclick = preparePdf;
+        status.appendChild(retry);
+      }
+    }
+  </script>
+
+    </div>
+  </main>
+</div>
+<script>Skillora.init({ active: "project", title: "Project AI", sub: "Analyze your project and get ready to explain it" });</script>
+</body>
+</html>

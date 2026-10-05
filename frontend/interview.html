@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interview AI · Skillora AI</title>
+  <link rel="icon" href="/assets/favicon.png" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/theme.css" />
+  <link rel="stylesheet" href="/assets/pages.css" />
+  <script src="/assets/app.js"></script>
+  <style>
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .chips { margin-top: 6px; }
+    #answer { min-height: 150px; }
+    @media (max-width: 700px) { .row, .row3 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside id="side" class="side"></aside>
+  <main class="main">
+    <header id="top" class="top"></header>
+    <div class="page">
+
+
+  <div class="inner">
+    <!-- ================= SETUP ================= -->
+    <section id="setup" class="card">
+      <h1>Practice a mock interview</h1>
+      <p class="muted">Pick your role and rounds. Questions come from your role, resume and projects. Every answer is scored instantly and you get a downloadable scorecard at the end.</p>
+
+      <div class="row">
+        <label>Your name <small>(optional, shown on the scorecard)</small>
+          <input type="text" id="name" /></label>
+        <label>Role you are preparing for
+          <input type="text" id="role" placeholder="for example: Software Engineer" /></label>
+      </div>
+      <div class="row">
+        <label>Company <small>(optional)</small>
+          <input type="text" id="company" placeholder="for example: Infosys" /></label>
+        <label>Your level
+          <select id="level">
+            <option value="fresher">Fresher / final-year student</option>
+            <option value="intern">Student with internships</option>
+            <option value="junior">1 to 2 years of experience</option>
+          </select></label>
+      </div>
+
+      <label>Rounds <small>(tap to switch on or off)</small></label>
+      <div class="chips" id="cats">
+        <span class="chip on" data-cat="hr">HR &amp; Behavioural</span>
+        <span class="chip on" data-cat="project">Your Projects</span>
+        <span class="chip on" data-cat="technical">Role Technical</span>
+        <span class="chip on" data-cat="academic">CS Fundamentals</span>
+      </div>
+
+      <label>Difficulty</label>
+      <div class="chips" id="diffs">
+        <span class="chip" data-diff="easy">Easy</span>
+        <span class="chip on" data-diff="medium">Medium</span>
+        <span class="chip" data-diff="hard">Hard</span>
+      </div>
+
+      <div class="row">
+        <label>Number of questions
+          <select id="count">
+            <option value="5">5 (quick)</option>
+            <option value="8" selected>8</option>
+            <option value="10">10</option>
+            <option value="12">12 (full)</option>
+          </select></label>
+        <label>Timer per question
+          <select id="timer">
+            <option value="0">No timer</option>
+            <option value="90">90 seconds</option>
+            <option value="150" selected>150 seconds</option>
+            <option value="240">240 seconds</option>
+          </select></label>
+      </div>
+
+      <label>Resume <small>(optional PDF, used for project questions)</small>
+        <input type="file" id="resume" accept=".pdf" /></label>
+      <label>Projects, internship, academics <small>(optional if you uploaded a resume)</small>
+        <textarea id="context" rows="4" placeholder="Describe your projects, internship work, skills and marks"></textarea></label>
+      <label>Job description <small>(optional, makes technical questions more relevant)</small>
+        <textarea id="jd" rows="3"></textarea></label>
+
+      <p id="setupError" class="err"></p>
+      <button class="primary" onclick="startInterview()">Start interview</button>
+    </section>
+
+    <!-- ================= LOADING ================= -->
+    <section id="loading" class="card" hidden style="text-align:center">
+      <div class="spinner"></div>
+      <p id="loadingText">Preparing your interview... this can take up to 30 seconds</p>
+    </section>
+
+    <!-- ================= PLAY ================= -->
+    <section id="play" hidden>
+      <div class="hud">
+        <span class="pill" id="roundPill"></span>
+        <span id="qCount" class="stat"></span>
+        <span>XP <span class="stat" id="xp">0</span></span>
+        <span id="streak" class="stat"></span>
+        <span class="timer" id="timer-display"></span>
+      </div>
+      <div class="progress"><div id="progressFill" style="width:0%"></div></div>
+
+      <div class="card" id="questionCard">
+        <div class="banner" id="banner" hidden></div>
+        <span class="qtag" id="qCategory"></span>
+        <div class="qtext" id="qText"></div>
+        <button id="tipBtn" onclick="showTip()" hidden>Need a hint?</button>
+        <div class="muted" id="tipText"></div>
+      </div>
+
+      <div class="card" id="answerCard">
+        <textarea id="answer" placeholder="Type your answer as you would say it in the interview..." oninput="updateCount()"></textarea>
+        <div class="counter" id="counter"></div>
+        <button class="primary" id="submitBtn" onclick="submitAnswer(false)">Submit answer</button>
+        <button id="micBtn" onclick="toggleMic()" hidden>Speak your answer</button>
+        <button id="skipBtn" onclick="skipQuestion()">Skip</button>
+        <p id="answerMsg" class="err"></p>
+      </div>
+
+      <div class="card" id="feedback" hidden></div>
+    </section>
+
+    <!-- ================= DONE ================= -->
+    <section id="done" hidden></section>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const WORD_RE = /[A-Za-z0-9][A-Za-z0-9'+#.\-]*/g;
+    const LENGTH_RANGE = { hr: [50, 200], project: [50, 200], technical: [30, 160], academic: [30, 160] };
+
+    let selectedDiff = "medium";
+    let session = null;
+    let timerId = null, timeLeft = 0, recognition = null, listening = false;
+
+    function el(tag, text, cls) {
+      const e = document.createElement(tag);
+      if (text !== undefined) e.textContent = text;
+      if (cls) e.className = cls;
+      return e;
+    }
+    function show(id) {
+      ["setup", "loading", "play", "done"].forEach(s => $(s).hidden = (s !== id));
+      window.scrollTo(0, 0);
+    }
+    function colorFor(v) { return v >= 70 ? "var(--green)" : v >= 50 ? "var(--amber)" : "var(--red)"; }
+    function countWords(t) { return (t.match(WORD_RE) || []).length; }
+
+    /* ---------------- setup controls ---------------- */
+    document.querySelectorAll("[data-cat]").forEach(c => c.onclick = () => c.classList.toggle("on"));
+    document.querySelectorAll("[data-diff]").forEach(c => c.onclick = () => {
+      document.querySelectorAll("[data-diff]").forEach(x => x.classList.remove("on"));
+      c.classList.add("on");
+      selectedDiff = c.dataset.diff;
+    });
+
+    async function startInterview() {
+      const role = $("role").value.trim();
+      $("setupError").textContent = "";
+      if (!role) { $("setupError").textContent = "Enter the role you are preparing for."; return; }
+      const cats = [...document.querySelectorAll("[data-cat].on")].map(c => c.dataset.cat);
+      if (!cats.length) { $("setupError").textContent = "Pick at least one round."; return; }
+
+      const form = new FormData();
+      form.append("role", role);
+      form.append("company", $("company").value.trim());
+      form.append("level", $("level").value);
+      form.append("difficulty", selectedDiff);
+      form.append("count", $("count").value);
+      form.append("categories", cats.join(","));
+      form.append("job_description", $("jd").value.trim());
+      form.append("context", $("context").value.trim());
+      const f = $("resume").files[0];
+      if (f) form.append("resume", f);
+
+      show("loading");
+      try {
+        const res = await fetch("/api/interview/start", { method: "POST", body: form });
+        const data = await res.json();
+        if (data.error || data.detail) {
+          show("setup");
+          $("setupError").textContent = data.error || ("Invalid request: " + JSON.stringify(data.detail));
+          return;
+        }
+        session = {
+          questions: data.questions, meta: data.meta, roundNames: data.round_names,
+          name: $("name").value.trim(), index: 0, results: [], xp: 0, streak: 0, bestStreak: 0,
+          timeLimit: parseInt($("timer").value) || 0, busy: false, qStart: 0
+        };
+        show("play");
+        showQuestion();
+      } catch (e) {
+        show("setup");
+        $("setupError").textContent = "Request failed: " + e;
+      }
+    }
+
+    /* ---------------- questions ---------------- */
+    function updateHud() {
+      $("xp").textContent = session.xp;
+      $("streak").textContent = session.streak >= 2 ? "Streak x" + session.streak : "";
+    }
+
+    function showQuestion() {
+      const q = session.questions[session.index];
+      const prev = session.questions[session.index - 1];
+      const newRound = !prev || prev.category !== q.category;
+      const roundName = session.roundNames[q.category];
+
+      $("roundPill").textContent = roundName;
+      $("qCount").textContent = "Question " + (session.index + 1) + " of " + session.questions.length;
+      $("progressFill").style.width = (session.index / session.questions.length * 100) + "%";
+      $("qCategory").textContent = roundName + " | " + q.difficulty;
+      $("qText").textContent = q.question;
+      $("tipText").textContent = "";
+      $("tipBtn").hidden = !q.tip;
+      $("banner").hidden = !newRound;
+      if (newRound) $("banner").textContent = "New round: " + roundName;
+
+      $("answer").value = "";
+      $("answer").disabled = false;
+      $("answerMsg").textContent = "";
+      $("answerCard").hidden = false;
+      $("feedback").hidden = true;
+      setBusy(false);
+      updateCount();
+      updateHud();
+      startTimer();
+      $("answer").focus();
+    }
+
+    function showTip() { $("tipText").textContent = "Hint: " + session.questions[session.index].tip; }
+
+    function updateCount() {
+      const q = session.questions[session.index];
+      const words = countWords($("answer").value);
+      const [lo, hi] = LENGTH_RANGE[q.category] || [30, 160];
+      const c = $("counter");
+      c.textContent = words + " words (aim for " + lo + " to " + hi + ")";
+      c.className = "counter" + (words >= lo && words <= hi ? " ok" : "");
+    }
+
+    function setBusy(b) {
+      session.busy = b;
+      ["submitBtn", "skipBtn", "micBtn"].forEach(id => $(id).disabled = b);
+      $("answer").disabled = b;
+    }
+
+    /* ---------------- timer ---------------- */
+    function stopTimer() { if (timerId) { clearInterval(timerId); timerId = null; } }
+    function renderTimer() {
+      const t = $("timer-display");
+      const m = Math.floor(timeLeft / 60), s = timeLeft % 60;
+      t.textContent = m + ":" + String(s).padStart(2, "0");
+      t.className = "timer" + (timeLeft <= 15 ? " low" : "");
+    }
+    function startTimer() {
+      stopTimer();
+      session.qStart = Date.now();
+      if (!session.timeLimit) { $("timer-display").textContent = ""; return; }
+      timeLeft = session.timeLimit;
+      renderTimer();
+      timerId = setInterval(() => {
+        timeLeft--;
+        renderTimer();
+        if (timeLeft <= 0) { stopTimer(); submitAnswer(true); }
+      }, 1000);
+    }
+    function secondsUsed() { return Math.max(0, Math.round((Date.now() - session.qStart) / 1000)); }
+
+    /* ---------------- voice input (optional) ---------------- */
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR) $("micBtn").hidden = false;
+
+    function stopMic() {
+      if (recognition && listening) { try { recognition.stop(); } catch (e) {} }
+      listening = false;
+      $("micBtn").textContent = "Speak your answer";
+    }
+    function toggleMic() {
+      if (listening) { stopMic(); return; }
+      try {
+        recognition = new SR();
+        recognition.lang = "en-IN";
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.onresult = e => {
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) {
+              const ta = $("answer");
+              const piece = e.results[i][0].transcript.trim();
+              ta.value += (ta.value && !/\s$/.test(ta.value) ? " " : "") + piece;
+            }
+          }
+          updateCount();
+        };
+        recognition.onerror = () => { $("answerMsg").textContent = "The microphone could not be used. You can type your answer instead."; stopMic(); };
+        recognition.onend = () => { listening = false; $("micBtn").textContent = "Speak your answer"; };
+        recognition.start();
+        listening = true;
+        $("micBtn").textContent = "Stop listening";
+      } catch (e) {
+        $("answerMsg").textContent = "Voice input is not available in this browser.";
+      }
+    }
+
+    /* ---------------- submit / skip ---------------- */
+    async function submitAnswer(auto) {
+      if (session.busy) return;
+      const q = session.questions[session.index];
+      const text = $("answer").value.trim();
+      const words = countWords(text);
+
+      if (!auto && words < 5) {
+        $("answerMsg").textContent = "Write at least a few sentences first, or press Skip.";
+        return;
+      }
+      stopTimer();
+      stopMic();
+      const seconds = secondsUsed();
+
+      if (words < 5) {   // time ran out with no real answer
+        recordSkip(q, text, seconds, "Time ran out before you wrote an answer.");
+        return;
+      }
+
+      setBusy(true);
+      $("answerMsg").className = "muted";
+      $("answerMsg").textContent = "Scoring your answer...";
+      try {
+        const res = await fetch("/api/interview/answer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q, answer: text, seconds, role: session.meta.role, level: session.meta.level })
+        });
+        const data = await res.json();
+        if (data.error || data.detail) {
+          $("answerMsg").className = "err";
+          $("answerMsg").textContent = (data.error || "Invalid request") + " Press Submit to try again.";
+          setBusy(false);
+          return;
+        }
+        $("answerMsg").textContent = "";
+        $("answerMsg").className = "err";
+        record(q, text, seconds, data.evaluation);
+      } catch (e) {
+        $("answerMsg").className = "err";
+        $("answerMsg").textContent = "Request failed: " + e + " Press Submit to try again.";
+        setBusy(false);
+      }
+    }
+
+    function skipQuestion() {
+      if (session.busy) return;
+      const q = session.questions[session.index];
+      stopTimer();
+      stopMic();
+      recordSkip(q, $("answer").value.trim(), secondsUsed(), "You skipped this question.");
+    }
+
+    function record(q, text, seconds, ev) {
+      session.results.push({ question: q, answer: text, seconds, evaluation: ev });
+      session.xp += ev.xp;
+      session.streak = ev.overall >= 70 ? session.streak + 1 : 0;
+      session.bestStreak = Math.max(session.bestStreak, session.streak);
+      updateHud();
+      showFeedback(ev);
+    }
+
+    function recordSkip(q, text, seconds, why) {
+      session.results.push({ question: q, answer: text, seconds, evaluation: null });
+      session.streak = 0;
+      updateHud();
+      showFeedback(null, why);
+    }
+
+    /* ---------------- feedback ---------------- */
+    function barRow(label, value, note) {
+      const r = el("div", undefined, "r");
+      const l = el("div", undefined, "lbl");
+      l.appendChild(el("span", label));
+      l.appendChild(el("span", value === null || value === undefined ? "n/a" : String(value)));
+      r.appendChild(l);
+      const bar = el("div", undefined, "bar");
+      const fill = el("div");
+      fill.style.width = (value || 0) + "%";
+      fill.style.background = colorFor(value || 0);
+      bar.appendChild(fill);
+      r.appendChild(bar);
+      if (note) r.appendChild(el("div", note, "muted"));
+      return r;
+    }
+
+    function listBlock(title, items, cls) {
+      if (!items || !items.length) return null;
+      const wrap = el("div");
+      wrap.appendChild(el("div", title, cls));
+      const ul = el("ul", undefined, "plain");
+      items.forEach(i => ul.appendChild(el("li", i)));
+      wrap.appendChild(ul);
+      return wrap;
+    }
+
+    function showFeedback(ev, skipMsg) {
+      const fb = $("feedback");
+      fb.innerHTML = "";
+      $("answerCard").hidden = true;
+      fb.hidden = false;
+
+      const q = session.questions[session.index];
+      const last = session.index === session.questions.length - 1;
+
+      if (!ev) {
+        fb.appendChild(el("h2", "Skipped"));
+        fb.appendChild(el("p", skipMsg + " This question scores 0."));
+      } else {
+        const head = el("div", undefined, "hud");
+        const big = el("div", String(ev.overall), "bigscore");
+        big.style.color = colorFor(ev.overall);
+        head.appendChild(big);
+        const side = el("div");
+        side.appendChild(el("div", "out of 100  |  +" + ev.xp + " XP", "stat"));
+        if (session.streak >= 2) side.appendChild(el("div", "Streak x" + session.streak + "! Keep going.", "good"));
+        head.appendChild(side);
+        fb.appendChild(head);
+
+        const bars = el("div", undefined, "bars");
+        bars.appendChild(barRow("Content", ev.content, ev.covered_points.length + " of " + (ev.covered_points.length + ev.missed_points.length) + " key points covered"));
+        bars.appendChild(barRow("Communication", ev.communication, ev.words + " words"));
+        if (ev.examples !== null && ev.examples !== undefined) bars.appendChild(barRow("Examples", ev.examples));
+        fb.appendChild(bars);
+
+        [listBlock("What worked", ev.strengths, "good"),
+         listBlock("Improve", ev.improvements, "warn"),
+         listBlock("Not correct", ev.incorrect_claims, "bad"),
+         listBlock("Key points you covered", ev.covered_points, "good"),
+         listBlock("Key points you missed", ev.missed_points, "warn"),
+         listBlock("Communication tips", ev.comm_tips, "warn")]
+          .forEach(b => { if (b) fb.appendChild(b); });
+
+        if (ev.better_answer) {
+          const b = el("div", undefined, "better");
+          b.appendChild(el("strong", "A stronger version of your answer: "));
+          b.appendChild(document.createTextNode(ev.better_answer));
+          fb.appendChild(b);
+        }
+      }
+
+      const next = el("button", last ? "Finish and see my scorecard" : "Next question", "primary");
+      next.onclick = last ? finishInterview : nextQuestion;
+      fb.appendChild(next);
+      next.focus();
+    }
+
+    function nextQuestion() {
+      session.index++;
+      showQuestion();
+    }
+
+    /* ---------------- finish + scorecard ---------------- */
+    async function finishInterview() {
+      $("loadingText").textContent = "Building your scorecard...";
+      show("loading");
+      try {
+        const res = await fetch("/api/interview/finish", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ results: session.results, meta: session.meta, candidate_name: session.name })
+        });
+        const data = await res.json();
+        if (data.error || data.detail) {
+          show("play");
+          $("feedback").appendChild(el("p", data.error || "Could not build the scorecard.", "err"));
+          return;
+        }
+        renderScorecard(data.scorecard);
+        preparePdf(data.scorecard);
+      } catch (e) {
+        show("play");
+        $("feedback").appendChild(el("p", "Request failed: " + e, "err"));
+      }
+    }
+
+    function section(title) {
+      const c = el("div", undefined, "card");
+      c.appendChild(el("h2", title));
+      return c;
+    }
+
+    function renderScorecard(card) {
+      const root = $("done");
+      root.innerHTML = "";
+
+      const hero = el("div", undefined, "card");
+      hero.appendChild(el("h1", "Your scorecard"));
+      hero.appendChild(el("div", [card.candidate_name, card.role + (card.company ? " at " + card.company : ""), card.difficulty].filter(Boolean).join("  |  "), "muted"));
+      const big = el("div", String(card.overall), "bigscore");
+      big.style.color = colorFor(card.overall);
+      hero.appendChild(big);
+      hero.appendChild(el("div", card.rank + "  |  " + card.xp + " / " + card.xp_max + " points  |  " + card.answered + " of " + card.total + " answered", "stat"));
+      if (session && session.bestStreak >= 2) hero.appendChild(el("div", "Best streak: " + session.bestStreak, "good"));
+      const pdfRow = el("div");
+      const view = el("a", "View PDF", "btn disabled"); view.id = "viewPdf"; view.target = "_blank";
+      const dl = el("a", "Download PDF", "btn primary disabled"); dl.id = "downloadPdf";
+      const again = el("button", "Practise again"); again.onclick = () => location.reload();
+      pdfRow.appendChild(view); pdfRow.appendChild(dl); pdfRow.appendChild(again);
+      hero.appendChild(pdfRow);
+      hero.appendChild(el("div", "", "muted")).id = "pdfStatus";
+      root.appendChild(hero);
+
+      const skills = section("Your skills");
+      const bars = el("div", undefined, "bars");
+      bars.appendChild(barRow("Content", card.dimensions.content, "knowledge and key points covered"));
+      bars.appendChild(barRow("Communication", card.dimensions.communication, "length, structure, filler words"));
+      bars.appendChild(barRow("Examples", card.dimensions.examples, "real examples in HR and project answers"));
+      skills.appendChild(bars);
+      root.appendChild(skills);
+
+      const rounds = section("Score by round");
+      const rb = el("div", undefined, "bars");
+      card.categories.forEach(c => rb.appendChild(barRow(c.name, c.score, c.count + " question(s)")));
+      rounds.appendChild(rb);
+      root.appendChild(rounds);
+
+      if (card.badges.length) {
+        const b = section("Badges earned");
+        card.badges.forEach(x => { const s = el("span", x.name, "badge"); s.title = x.description; b.appendChild(s); });
+        root.appendChild(b);
+      }
+
+      const pr = section("What to practise next");
+      const ol = el("ol");
+      card.practise.forEach(p => ol.appendChild(el("li", p)));
+      pr.appendChild(ol);
+      root.appendChild(pr);
+
+      const qs = section("Question by question");
+      card.questions.forEach((q, i) => {
+        const d = el("details", undefined, "q");
+        d.appendChild(el("summary", "Q" + (i + 1) + " | " + q.category_name + " | " + q.overall + "/100 | " + q.question));
+        d.appendChild(el("p", q.skipped ? "Skipped." : "Your answer: " + (q.answer || "(empty)")));
+        d.appendChild(el("p", "Content " + q.content + "  |  Communication " + q.communication +
+          "  |  Examples " + (q.examples === null ? "n/a" : q.examples) + "  |  Time " + q.seconds + "s", "muted"));
+        [listBlock("What worked", q.strengths, "good"), listBlock("Improve", q.improvements, "warn"),
+         listBlock("Not correct", q.incorrect_claims, "bad"), listBlock("Key points missed", q.missed_points, "warn"),
+         listBlock("Communication tips", q.comm_tips, "warn")].forEach(x => { if (x) d.appendChild(x); });
+        if (q.better_answer) {
+          const bb = el("div", undefined, "better");
+          bb.appendChild(el("strong", "A stronger version: "));
+          bb.appendChild(document.createTextNode(q.better_answer));
+          d.appendChild(bb);
+        }
+        qs.appendChild(d);
+      });
+      root.appendChild(qs);
+
+      root.appendChild(el("p", "These scores are practice feedback. They estimate how ready your answers are and do not predict real interview results.", "muted"));
+      show("done");
+    }
+
+    let pdfUrl = null;
+    async function preparePdf(card) {
+      const status = $("pdfStatus");
+      status.className = "muted";
+      status.textContent = "Preparing your PDF...";
+      try {
+        const res = await fetch("/api/interview/report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scorecard: card })
+        });
+        const type = res.headers.get("content-type") || "";
+        if (!res.ok || !type.includes("pdf")) {
+          let msg = "Could not build the PDF.";
+          try { msg = (await res.json()).error || msg; } catch (e) {}
+          throw new Error(msg);
+        }
+        if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+        pdfUrl = URL.createObjectURL(await res.blob());
+        const view = $("viewPdf"), dl = $("downloadPdf");
+        view.href = pdfUrl;
+        dl.href = pdfUrl;
+        dl.download = "Interview_Scorecard.pdf";
+        view.classList.remove("disabled");
+        dl.classList.remove("disabled");
+        status.textContent = "";
+      } catch (e) {
+        status.className = "err";
+        status.textContent = e.message + " ";
+        const retry = el("button", "Try again");
+        retry.onclick = () => preparePdf(card);
+        status.appendChild(retry);
+      }
+    }
+  </script>
+
+    </div>
+  </main>
+</div>
+<script>Skillora.init({ active: "interview", title: "Interview AI", sub: "Practise a mock interview and get scored" });</script>
+</body>
+</html>
