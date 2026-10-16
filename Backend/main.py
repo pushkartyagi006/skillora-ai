@@ -20,6 +20,7 @@ from teacher import router as teacher_router
 from interview import router as interview_router
 from project import router as project_router
 from auth import router as auth_router
+from auth import install_guard
 from check_pdf import router as check_router
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -35,6 +36,7 @@ FALLBACKS = [
 client = genai.Client(api_key=API_KEY) if API_KEY else None
 
 app = FastAPI(title="Resume AI")
+install_guard(app)
 app.include_router(builder_router)
 app.include_router(company_router)
 app.include_router(report_router)
