@@ -9,6 +9,11 @@ WHERE THE DATA IS STORED
   Passwords are never stored, only a salted PBKDF2-SHA256 hash.
   Login tokens are never stored either, only their SHA-256 hash.
   Uploaded resumes and reports are processed in memory and are not saved.
+
+LOGIN CHECK AND DAILY LIMIT
+  install_guard(app) (called once from main.py) protects every /api/ address except /api/auth/ and /api/health.
+  A request without a valid login gets "Please log in". Calls that use Gemini are counted per user per day
+  in the ai_usage table. When a user passes AI_DAILY_LIMIT (default 60) they get a friendly message until midnight IST.
 """
 
 import functools
@@ -21,11 +26,13 @@ import ssl
 import threading
 import time
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, Header
+from fastapi import APIRouter, Header, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -38,6 +45,16 @@ log = logging.getLogger("skillora.auth")
 SQLITE_FILE = BASE / "skillora.db"
 ROLES = {"student", "teacher", "company", "job seeker"}
 SESSION_SECONDS = 30 * 24 * 3600   # a login lasts 30 days
+
+# ---- AI usage limits (change AI_DAILY_LIMIT in Render's Environment tab or in your local .env) ----
+try:
+    DAILY_LIMIT = max(1, int(os.getenv("AI_DAILY_LIMIT", "60")))
+except ValueError:
+    DAILY_LIMIT = 60
+IST = timezone(timedelta(hours=5, minutes=30))
+FREE_ENDINGS = ("/report", "/pdf", "/finish", "/extract", "/models")           # these never call Gemini
+WEIGHTS = {"/api/company/rank": 5, "/api/teacher/check": 5}                     # these handle many files at once
+DOC_PATHS = {"/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"}       # hidden on the live site
 
 
 # ---------------------------------------------------------------- database layer
@@ -148,6 +165,8 @@ def _ensure_schema(con: Conn):
                 "user_id INTEGER, created REAL)",
             ]
         statements.append("CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)")
+        statements.append("CREATE TABLE IF NOT EXISTS ai_usage(user_id BIGINT NOT NULL, used_on TEXT NOT NULL, "
+                          "calls INTEGER NOT NULL, PRIMARY KEY(user_id, used_on))")
         for s in statements:
             con.execute(s)
         con.commit()
@@ -374,6 +393,7 @@ def delete_account(body: AccountDelete, authorization: str = Header(default=""))
         if not secrets.compare_digest(row["pw"], hash_pw(body.password, row["salt"])):
             return err("Password is wrong.", 400)
         con.execute("DELETE FROM sessions WHERE user_id=?", (row["id"],))
+        con.execute("DELETE FROM ai_usage WHERE user_id=?", (row["id"],))
         con.execute("DELETE FROM users WHERE id=?", (row["id"],))
     return {"ok": True}
 
@@ -396,3 +416,63 @@ def dbinfo():
     with session() as con:
         count = con.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
     return {"database": "supabase-postgres" if using_postgres() else "local-sqlite-file", "users": count}
+
+
+# ---------------------------------------------------------------- login check + daily limit
+def today_ist() -> str:
+    return datetime.now(IST).strftime("%Y-%m-%d")
+
+
+def ai_cost(path: str, method: str) -> int:
+    """How many AI uses a request costs. 0 means it is free (PDF, extract text, and similar)."""
+    if method != "POST" or path.endswith(FREE_ENDINGS):
+        return 0
+    return WEIGHTS.get(path, 1)
+
+
+def needs_login(path: str) -> bool:
+    return path.startswith("/api/") and not path.startswith("/api/auth/") and path != "/api/health"
+
+
+def check_access(authorization: str, path: str, method: str):
+    """None means allowed. Otherwise returns the error response to send back."""
+    try:
+        with session() as con:
+            user = current_user(authorization, con)
+            if not user:
+                return err("Please log in to use this feature.", 401)
+            cost = ai_cost(path, method)
+            if cost:
+                day = today_ist()
+                row = con.execute("SELECT calls FROM ai_usage WHERE user_id=? AND used_on=?", (user["id"], day)).fetchone()
+                if (row["calls"] if row else 0) >= DAILY_LIMIT:
+                    return err(f"You have used your {DAILY_LIMIT} free AI requests for today. "
+                               "The limit resets at midnight (IST), so please come back tomorrow.", 429)
+                con.execute(
+                    "INSERT INTO ai_usage(user_id, used_on, calls) VALUES(?,?,?) "
+                    "ON CONFLICT(user_id, used_on) DO UPDATE SET calls = ai_usage.calls + ?",
+                    (user["id"], day, cost, cost))
+                con.execute("DELETE FROM ai_usage WHERE used_on < ?",
+                            ((datetime.now(IST) - timedelta(days=7)).strftime("%Y-%m-%d"),))
+    except DbDown:
+        log.exception("database not reachable (login check)")
+        return err("The database is not reachable right now. Please try again in a minute.", 503)
+    except Exception:
+        log.exception("login check error")
+        return err("Something went wrong on the server. Please try again.", 500)
+    return None
+
+
+def install_guard(app):
+    """Call once in main.py: install_guard(app)."""
+
+    @app.middleware("http")
+    async def login_guard(request: Request, call_next):
+        path = request.url.path
+        if os.getenv("RENDER") and path in DOC_PATHS:          # RENDER is set only on the live site
+            return err("Not found.", 404)
+        if request.method != "OPTIONS" and needs_login(path):
+            denied = await run_in_threadpool(check_access, request.headers.get("authorization", ""), path, request.method)
+            if denied is not None:
+                return denied
+        return await call_next(request)
