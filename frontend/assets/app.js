@@ -1,3 +1,28 @@
+/* ===== Skillora: send the login token with every call to the server ===== */
+(function () {
+  var rawFetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    init = init || {};
+    var url = typeof input === "string" ? input : (input && input.url) || "";
+    var isApi = url.indexOf("/api/") === 0 || url.indexOf(location.origin + "/api/") === 0;
+    var token = null;
+    try { token = localStorage.getItem("sk_token"); } catch (e) {}
+    if (isApi && token) {
+      var headers = new Headers(init.headers || (typeof input !== "string" && input.headers) || {});
+      if (!headers.has("Authorization")) headers.set("Authorization", "Bearer " + token);
+      init = Object.assign({}, init, { headers: headers });
+    }
+    return rawFetch(input, init).then(function (res) {
+      if (res.status === 401 && isApi && url.indexOf("/api/auth/") === -1) {
+        try { localStorage.removeItem("sk_token"); } catch (e) {}
+        location.replace("/login.html");
+      }
+      return res;
+    });
+  };
+})();
+/* ===== end ===== */
+
 /* Skillora AI shared script. Load in <head> on every page. */
 (function () {
   const root = document.documentElement;
