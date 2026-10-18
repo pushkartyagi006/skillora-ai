@@ -1,4 +1,6 @@
-/* ===== Skillora: send the login token with every call to the server ===== */
+/* ===== Skillora: send the login token with every call to the server =====
+   The server checks login on every /api/ address. This adds the token automatically,
+   and sends you to the login page if the server says you are not logged in. */
 (function () {
   var rawFetch = window.fetch.bind(window);
   window.fetch = function (input, init) {
@@ -21,7 +23,7 @@
     });
   };
 })();
-/* ===== end ===== */
+/* ===== end of login-token helper ===== */
 
 /* Skillora AI shared script. Load in <head> on every page. */
 (function () {
@@ -46,6 +48,7 @@
     shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z",
     palette: "M12 3a9 9 0 1 0 0 18c1.4 0 2-1 2-2 0-1.5-1-1.7-1-3 0-1 .8-2 2-2h3a3 3 0 0 0 3-3c0-4-4-8-9-8zM7.5 11h.01M10 7.5h.01M14.5 7.5h.01",
     trash: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
+    history: "M3 12a9 9 0 1 0 3-6.7M3 4v4h4M12 7v5l3 2",
   };
   const ic = (n) => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${P[n]}"/></svg>`;
 
@@ -102,7 +105,7 @@
 
     // Builds the sidebar. Needs <aside id="side" class="side"></aside> on the page.
     shell(active) {
-      const nav = [{ id: "home", name: "Home", href: "/home.html", icon: "home" }, ...FEATURES];
+      const nav = [{ id: "home", name: "Home", href: "/home.html", icon: "home" }, ...FEATURES, { id: "history", name: "History", href: "/history.html", icon: "history" }];
       document.getElementById("side").innerHTML =
         `<a class="brand" href="/home.html"><img src="/assets/logo.png" alt=""><span class="wordmark">Skillora <b>AI</b></span></a>` +
         `<nav>${nav.map((n) => `<a href="${n.href}" class="${n.id === active ? "on" : ""}">${ic(n.icon)}${n.name}</a>`).join("")}</nav>` +
@@ -116,6 +119,82 @@
     },
 
 
+
+    // ---------------------------------------------------------------- history (saved results and drafts)
+    HISTORY_KINDS: {
+      resume_check: { label: "Resume check", page: "/resume.html", icon: "file", color: "#2563EB" },
+      resume_build: { label: "Resume draft", page: "/builder.html", icon: "file", color: "#2563EB" },
+      teacher: { label: "Teacher AI", page: "/teacher.html", icon: "teacher", color: "#7C3AED" },
+      hiring: { label: "Hiring AI", page: "/company.html", icon: "hiring", color: "#16A34A" },
+      interview: { label: "Interview", page: "/interview.html", icon: "mic", color: "#F97316" },
+      project: { label: "Project", page: "/project.html", icon: "code", color: "#0891B2" },
+    },
+    historyUrl(item) {
+      const k = S.HISTORY_KINDS[item.kind];
+      return (k ? k.page : "/history.html") + "?history=" + item.id;
+    },
+    esc(s) {
+      return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    },
+    fmtDate(ts) {
+      return new Date(ts * 1000).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
+    },
+    autosave: () => localStorage.getItem("sk_autosave") !== "0",
+
+    toast(msg, opts) {
+      opts = opts || {};
+      document.querySelectorAll(".toast").forEach((t) => t.remove());
+      const t = document.createElement("div");
+      t.className = "toast" + (opts.kind === "err" ? " err" : "");
+      t.setAttribute("role", "status");
+      t.innerHTML = `<span>${S.esc(msg)}</span>` + (opts.href ? ` <a href="${opts.href}">${S.esc(opts.link || "View")}</a>` : "");
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), opts.kind === "err" ? 7000 : 4500);
+    },
+
+    // Saves a result to the user's History. Returns the new id, or null.
+    async saveHistory(item) {
+      if (!S.autosave()) return null;
+      const d = await S.api("/api/history", item);
+      if (d.error || !d.id) { S.toast("Could not save to History: " + (d.error || "unknown error"), { kind: "err" }); return null; }
+      S.toast("Saved to History", { href: "/history.html", link: "View" });
+      return d.id;
+    },
+    // Updates an item saved earlier (for example a draft that keeps changing). Quiet on success.
+    async updateHistory(id, patch) {
+      if (!id) return false;
+      const d = await S.api("/api/history/" + encodeURIComponent(id), patch, "PUT");
+      if (d.error) { S.toast("Could not update History: " + d.error, { kind: "err" }); return false; }
+      return true;
+    },
+    // If the page was opened from History (?history=ID), loads that item and calls render(payload, item).
+    async openSaved(kind, render) {
+      const id = new URLSearchParams(location.search).get("history");
+      if (!id) return false;
+      const d = await S.api("/api/history/" + encodeURIComponent(id));
+      if (d.error || !d.item || d.item.kind !== kind) {
+        S.toast("That saved item was not found. It may have been deleted.", { kind: "err" });
+        return false;
+      }
+      try { await render(d.item.payload, d.item); } catch (e) {
+        console.error(e);
+        S.toast("Could not open that saved item.", { kind: "err" });
+        return false;
+      }
+      S.savedBar(d.item);
+      return true;
+    },
+    savedBar(item) {
+      const page = document.querySelector(".page");
+      if (!page || page.querySelector(".savedbar")) return;
+      const bar = document.createElement("div");
+      bar.className = "savedbar";
+      const k = S.HISTORY_KINDS[item.kind] || { label: "item" };
+      bar.innerHTML = `<span>Showing a saved ${S.esc(k.label.toLowerCase())} from <b>${S.esc(S.fmtDate(item.created_at))}</b>.</span>` +
+        ` <a href="/history.html">Back to History</a> <a href="${location.pathname}">Start new</a>`;
+      const hero = page.querySelector(".pagehero");
+      page.insertBefore(bar, hero ? hero.nextSibling : page.firstChild);
+    },
 
     AVATARS: [["#2563EB", "#7C3AED"], ["#0891B2", "#2563EB"], ["#16A34A", "#0891B2"], ["#F97316", "#DB2777"], ["#7C3AED", "#DB2777"]],
     avatarGradient() {
