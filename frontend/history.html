@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>History · Skillora AI</title>
+  <link rel="icon" href="/assets/favicon.png" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap" />
+  <link rel="stylesheet" href="/assets/theme.css" />
+  <link rel="stylesheet" href="/assets/pages.css" />
+  <script src="/assets/app.js"></script>
+  <style>
+    .page { max-width: 980px; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+    .toolbar .grow { flex: 1 1 220px; }
+    .toolbar input[type=search] { width: 100%; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); font: inherit; font-size: 14px; }
+    .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .filters .chip { margin: 0; }
+    .opts { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+    .opts label { margin: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; }
+    .daylabel { margin: 22px 0 8px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .hitem { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 10px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+    .hbadge { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 13px; background: var(--k); color: #fff; }
+    .hmain { flex: 1 1 260px; min-width: 0; }
+    .hmain strong { display: block; font-size: 15px; overflow-wrap: anywhere; }
+    .hmain .sum { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+    .hmain .meta { margin-top: 2px; color: var(--muted); font-size: 12px; }
+    .hmain .kind { display: inline-block; margin-right: 8px; padding: 1px 9px; border-radius: 99px; background: color-mix(in srgb, var(--k) 14%, var(--surface)); color: var(--k); font-weight: 700; font-size: 11.5px; }
+    .hscore { flex: none; min-width: 54px; text-align: center; font-size: 22px; font-weight: 800; line-height: 1; }
+    .hscore small { display: block; margin-top: 3px; font-size: 10.5px; font-weight: 600; color: var(--muted); }
+    .hactions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .hactions .btn, .hactions button { margin: 0; padding: 7px 13px; font-size: 13px; }
+    .hactions .del:hover { border-color: var(--bad); color: var(--bad); }
+    .empty { padding: 36px 20px; text-align: center; color: var(--muted); }
+    .empty strong { display: block; margin-bottom: 6px; color: var(--text); font-size: 17px; }
+    .privacy { margin-top: 18px; font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside id="side" class="side"></aside>
+  <main class="main">
+    <header id="top" class="top"></header>
+    <div class="page" id="pageBox">
+
+      <section class="card">
+        <div class="toolbar">
+          <div class="grow"><input type="search" id="q" placeholder="Search your history..." aria-label="Search your history" /></div>
+          <button id="clearAll" class="del" style="margin:0">Clear all history</button>
+        </div>
+        <div class="filters" id="filters"></div>
+        <div class="opts">
+          <label><input type="checkbox" id="auto" /> Save my results to History automatically</label>
+          <span id="count"></span>
+        </div>
+      </section>
+
+      <div id="list"></div>
+
+      <p class="privacy">History keeps your results (scores, summaries and drafts) in your account so you can open them again on any device.
+        Your uploaded files are never saved. Hiring AI and Teacher AI results include the names that appeared in your files, so delete them when you no longer need them.
+        You can delete any item, or everything, at any time. Each person can only see their own history.</p>
+    </div>
+  </main>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const S = Skillora;
+  let items = [], kindFilter = "", query = "";
+
+  const PDF = {
+    resume_check: async (p) => ["/api/check/report", { result: p.data, job_title: p.job_title, file_name: p.file_name }, "Resume_Check_Report.pdf"],
+    resume_build: async (p) => ["/api/builder/pdf", { resume: p.versions[p.versions.length - 1] }, "Resume.pdf"],
+    teacher: async (p) => ["/api/teacher/report", { result: p.result }, "Teacher_Report.pdf"],
+    hiring: async (p) => ["/api/company/report", { result: p.result, criteria: p.criteria || {} }, "Hiring_Shortlist.pdf"],
+    interview: async (p) => ["/api/interview/report", { scorecard: p.card }, "Interview_Scorecard.pdf"],
+    project: async (p) => { const r = Object.assign({}, p.state); delete r.facts; return ["/api/project/report", { report: r }, "Project_Analysis_Report.pdf"]; },
+  };
+  const hasPdf = (it) => it.kind !== "resume_build" || /ready/i.test(it.summary);
+
+  function dayLabel(ts) {
+    const d = new Date(ts * 1000), n = new Date();
+    const a = new Date(d.getFullYear(), d.getMonth(), d.getDate()), b = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+    const diff = Math.round((b - a) / 86400000);
+    if (diff <= 0) return "Today";
+    if (diff === 1) return "Yesterday";
+    return d.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  }
+  const scoreColor = (n) => n >= 70 ? "var(--ok)" : n >= 50 ? "var(--warn)" : "var(--bad)";
+
+  function drawFilters() {
+    const kinds = Object.keys(S.HISTORY_KINDS);
+    const present = new Set(items.map((i) => i.kind));
+    const box = $("filters"); box.innerHTML = "";
+    const mk = (value, text) => {
+      const c = document.createElement("span");
+      c.className = "chip" + (kindFilter === value ? " on" : "");
+      c.textContent = text; c.tabIndex = 0; c.setAttribute("role", "button");
+      const go = () => { kindFilter = value; drawFilters(); draw(); };
+      c.onclick = go; c.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+      box.appendChild(c);
+    };
+    mk("", "All");
+    kinds.filter((k) => present.has(k)).forEach((k) => mk(k, S.HISTORY_KINDS[k].label));
+  }
+
+  function visible() {
+    const q = query.trim().toLowerCase();
+    return items.filter((i) => (!kindFilter || i.kind === kindFilter) &&
+      (!q || (i.title + " " + i.summary + " " + (S.HISTORY_KINDS[i.kind] || {}).label).toLowerCase().includes(q)));
+  }
+
+  function draw() {
+    const list = $("list"); list.innerHTML = "";
+    const shown = visible();
+    $("count").textContent = items.length + (items.length === 1 ? " item" : " items") + " saved";
+    $("clearAll").hidden = !items.length;
+    if (!shown.length) {
+      list.innerHTML = items.length
+        ? `<div class="card empty"><strong>Nothing matches</strong>Try a different search or filter.</div>`
+        : `<div class="card empty"><strong>Your history is empty</strong>Run a resume check, analyze a project or practise an interview, and the result will appear here so you can open it again any time.</div>`;
+      return;
+    }
+    let lastDay = "";
+    shown.forEach((it) => {
+      const day = dayLabel(it.updated_at);
+      if (day !== lastDay) { const h = document.createElement("div"); h.className = "daylabel"; h.textContent = day; list.appendChild(h); lastDay = day; }
+      const k = S.HISTORY_KINDS[it.kind] || { label: it.kind, icon: "file", color: "#64748B" };
+      const row = document.createElement("div");
+      row.className = "hitem"; row.style.setProperty("--k", k.color);
+      row.innerHTML =
+        `<div class="hbadge">${S.ic(k.icon)}</div>` +
+        `<div class="hmain"><strong>${S.esc(it.title)}</strong><div class="sum">${S.esc(it.summary)}</div>` +
+        `<div class="meta"><span class="kind">${S.esc(k.label)}</span>${S.esc(S.fmtDate(it.updated_at))}</div></div>` +
+        (it.score != null ? `<div class="hscore" style="color:${scoreColor(it.score)}">${Math.round(it.score)}<small>out of 100</small></div>` : "") +
+        `<div class="hactions"></div>`;
+      const acts = row.querySelector(".hactions");
+      const open = document.createElement("a");
+      open.className = "btn primary"; open.style.padding = "7px 15px"; open.style.fontSize = "13px";
+      open.href = S.historyUrl(it); open.textContent = it.kind === "resume_build" ? "Continue" : "Open";
+      acts.appendChild(open);
+      if (hasPdf(it)) {
+        const pdf = document.createElement("button");
+        pdf.textContent = "PDF"; pdf.onclick = () => downloadPdf(it, pdf);
+        acts.appendChild(pdf);
+      }
+      const del = document.createElement("button");
+      del.className = "del"; del.textContent = "Delete"; del.onclick = () => remove(it);
+      acts.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+
+  async function downloadPdf(it, btn) {
+    const old = btn.textContent; btn.disabled = true; btn.textContent = "Preparing...";
+    try {
+      const d = await S.api("/api/history/" + it.id);
+      if (d.error) throw new Error(d.error);
+      const [url, body, name] = await PDF[it.kind](d.item.payload);
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok || !(res.headers.get("content-type") || "").includes("pdf")) {
+        let msg = "Could not build the PDF."; try { msg = (await res.json()).error || msg; } catch (e) {}
+        throw new Error(msg);
+      }
+      const blobUrl = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a"); a.href = blobUrl; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch (e) { S.toast(e.message || "Could not build the PDF.", { kind: "err" }); }
+    finally { btn.disabled = false; btn.textContent = old; }
+  }
+
+  async function remove(it) {
+    if (!confirm("Delete \"" + it.title + "\" from your history? This cannot be undone.")) return;
+    const d = await S.api("/api/history/" + it.id, undefined, "DELETE");
+    if (d.error) { S.toast(d.error, { kind: "err" }); return; }
+    items = items.filter((x) => x.id !== it.id); drawFilters(); draw();
+  }
+
+  async function load() {
+    const d = await S.api("/api/history?limit=80");
+    if (d.error) { $("list").innerHTML = `<div class="card empty err"><strong>Could not load your history</strong>${S.esc(d.error)}</div>`; return; }
+    items = d.items || []; drawFilters(); draw();
+  }
+
+  S.init({ active: "history", title: "History", sub: "Everything you have saved, ready to open again" }).then((u) => {
+    if (!u) return;
+    $("auto").checked = S.autosave();
+    $("auto").onchange = () => { localStorage.setItem("sk_autosave", $("auto").checked ? "1" : "0"); S.toast($("auto").checked ? "New results will be saved to History." : "New results will not be saved."); };
+    $("q").oninput = () => { query = $("q").value; draw(); };
+    $("clearAll").onclick = async () => {
+      if (!confirm("Delete ALL of your history? This cannot be undone.")) return;
+      const d = await S.api("/api/history/clear", {});
+      if (d.error) { S.toast(d.error, { kind: "err" }); return; }
+      items = []; kindFilter = ""; drawFilters(); draw();
+    };
+    load();
+  });
+</script>
+</body>
+</html>

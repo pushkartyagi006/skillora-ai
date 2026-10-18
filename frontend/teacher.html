@@ -186,12 +186,24 @@
         lastResult = data;
         render(data);
         document.getElementById("btnPdf").style.display = "inline-block";
+        saveTeacher();
       } catch (e) {
         status.className = "err";
         status.textContent = "Request failed: " + e;
       } finally {
         btn.disabled = false;
       }
+    }
+
+    // Saves this batch to the user's History so it can be opened again any time.
+    function saveTeacher() {
+      const s = lastResult.summary || {};
+      Skillora.saveHistory({
+        kind: "teacher",
+        title: document.getElementById("assignment").value.trim() || "Report check",
+        summary: s.total + " reports: " + s.approved + " approved, " + s.unapproved + " not approved, " + s.review + " need review",
+        payload: { result: lastResult }
+      });
     }
 
     async function downloadReport() {
@@ -236,6 +248,16 @@
     </div>
   </main>
 </div>
-<script>Skillora.init({ active: "teacher", title: "Teacher AI", sub: "Check student project reports against your requirements" });</script>
+<script>
+  Skillora.init({ active: "teacher", title: "Teacher AI", sub: "Check student project reports against your requirements" }).then((u) => {
+    if (!u) return;
+    Skillora.openSaved("teacher", (p, item) => {
+      lastResult = p.result;
+      document.getElementById("assignment").value = item.title === "Report check" ? "" : item.title;
+      render(lastResult);
+      document.getElementById("btnPdf").style.display = "inline-block";
+    });
+  });
+</script>
 </body>
 </html>

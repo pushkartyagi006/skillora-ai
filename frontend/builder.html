@@ -137,6 +137,94 @@
       s.textContent = msg;
     }
 
+    /* ---------- History: the resume is saved as a draft you can continue later ---------- */
+    let historyId = null, historyBusy = null, draftTimer = null;
+
+    function renderQuestions(answers) {
+      const box = document.getElementById("questions");
+      box.innerHTML = "";
+      currentQuestions.forEach((q, i) => {
+        const wrap = el("div", undefined, "q");
+        wrap.appendChild(el("strong", (i + 1) + ". " + q));
+        const ta = el("textarea");
+        ta.rows = 2;
+        ta.className = "ans";
+        ta.value = (answers && answers[i]) || "";
+        wrap.appendChild(ta);
+        box.appendChild(wrap);
+      });
+      document.getElementById("step2").style.display = "block";
+    }
+
+    function draftState() {
+      return {
+        fields: getProfile(),
+        questions: currentQuestions,
+        answers: [...document.querySelectorAll(".ans")].map(ta => ta.value),
+        versions: versions
+      };
+    }
+
+    function draftMeta() {
+      const p = getProfile();
+      const last = versions[versions.length - 1];
+      const who = (last && last.name) || p.name || "My resume";
+      return {
+        title: who + (p.target_role ? " - " + p.target_role : ""),
+        summary: last ? "Resume ready, version " + versions.length
+                      : (currentQuestions.length ? "Answering follow-up questions" : "Filling in details")
+      };
+    }
+
+    async function saveDraft() {
+      if (!getProfile().name) return;
+      const body = Object.assign(draftMeta(), { payload: draftState() });
+      if (historyId) { await Skillora.updateHistory(historyId, body); return; }
+      if (historyBusy) { await historyBusy; if (historyId) await Skillora.updateHistory(historyId, body); return; }
+      historyBusy = Skillora.saveHistory(Object.assign({ kind: "resume_build" }, body))
+        .then((id) => { historyId = id; historyBusy = null; return id; });
+      await historyBusy;
+    }
+
+    // typing in any box keeps the saved draft up to date (after a short pause)
+    document.addEventListener("input", () => {
+      if (!historyId) return;
+      clearTimeout(draftTimer);
+      draftTimer = setTimeout(saveDraft, 1500);
+    });
+
+    async function restoreDraft(p, item) {
+      historyId = item.id;
+      const f = p.fields || {};
+      FIELDS.forEach(k => { if (f[k] !== undefined) document.getElementById(k).value = f[k]; });
+      currentQuestions = p.questions || [];
+      if (currentQuestions.length) renderQuestions(p.answers || []);
+      const vs = p.versions || [];
+      if (vs.length) {
+        versions = vs.slice(0, -1);                   // showResume adds the newest one back
+        const ok = await showResume(vs[vs.length - 1], false);
+        if (ok) document.getElementById("step3").style.display = "flex";
+      }
+    }
+
+    // On a fresh builder page, offer to continue the latest unfinished resume.
+    async function offerContinue() {
+      if (new URLSearchParams(location.search).get("history")) return;
+      const d = await Skillora.api("/api/history?kind=resume_build&limit=1");
+      const it = d.items && d.items[0];
+      if (!it) return;
+      const bar = el("div", undefined, "savedbar");
+      const msg = el("span");
+      msg.appendChild(document.createTextNode("You have an unfinished resume: "));
+      msg.appendChild(el("b", it.title));
+      msg.appendChild(document.createTextNode(" (" + Skillora.fmtDate(it.updated_at) + ")."));
+      const go = el("a", "Continue where I left off"); go.href = Skillora.historyUrl(it);
+      const no = el("a", "Start a new one"); no.href = "#"; no.onclick = (e) => { e.preventDefault(); bar.remove(); };
+      [msg, go, no].forEach(n => bar.appendChild(n));
+      const step1 = document.getElementById("step1");
+      step1.parentNode.insertBefore(bar, step1);
+    }
+
     /* ---------- Step 1 -> questions ---------- */
     async function getQuestions() {
       const p = getProfile();
@@ -153,18 +241,8 @@
         setStatus("status", "");
 
         currentQuestions = data.questions;
-        const box = document.getElementById("questions");
-        box.innerHTML = "";
-        currentQuestions.forEach((q, i) => {
-          const wrap = el("div", undefined, "q");
-          wrap.appendChild(el("strong", (i + 1) + ". " + q));
-          const ta = el("textarea");
-          ta.rows = 2;
-          ta.className = "ans";
-          wrap.appendChild(ta);
-          box.appendChild(wrap);
-        });
-        document.getElementById("step2").style.display = "block";
+        renderQuestions([]);
+        saveDraft();
       } catch (e) {
         setStatus("status", "Request failed: " + e, true);
       } finally {
@@ -188,6 +266,7 @@
           setStatus("status", "");
           document.getElementById("step3").style.display = "flex";
           document.getElementById("step3").scrollIntoView();
+          saveDraft();
         }
       } catch (e) {
         setStatus("status", "Request failed: " + e, true);
@@ -260,6 +339,7 @@
           setStatus("status3", "");
           document.getElementById("instruction").value = "";
           if (data.message) { msg.textContent = data.message; msg.style.display = "block"; }
+          saveDraft();
         }
       } catch (e) {
         setStatus("status3", "Request failed: " + e, true);
@@ -276,6 +356,7 @@
         setStatus("status3", "");
         document.getElementById("aimsg").style.display = "none";
         updateVersionUi();
+        saveDraft();
       } catch (e) {
         versions.push(removed);
         setStatus("status3", e.message, true);
@@ -298,6 +379,12 @@
     </div>
   </main>
 </div>
-<script>Skillora.init({ active: "resume", title: "Resume AI", sub: "Build a strong resume with AI follow-up questions" });</script>
+<script>
+  Skillora.init({ active: "resume", title: "Resume AI", sub: "Build a strong resume with AI follow-up questions" }).then(async (u) => {
+    if (!u) return;
+    const opened = await Skillora.openSaved("resume_build", restoreDraft);
+    if (!opened) offerContinue();
+  });
+</script>
 </body>
 </html>

@@ -483,10 +483,22 @@
         }
         renderScorecard(data.scorecard);
         preparePdf(data.scorecard);
+        saveInterview(data.scorecard);
       } catch (e) {
         show("play");
         $("feedback").appendChild(el("p", "Request failed: " + e, "err"));
       }
+    }
+
+    // Saves the finished scorecard to the user's History so it can be opened again any time.
+    function saveInterview(card) {
+      Skillora.saveHistory({
+        kind: "interview",
+        title: (card.role || "Mock") + " interview",
+        summary: card.rank + " | " + card.xp + " / " + card.xp_max + " points | " + card.answered + " of " + card.total + " answered",
+        score: card.overall,
+        payload: { card: card }
+      });
     }
 
     function section(title) {
@@ -605,6 +617,11 @@
     </div>
   </main>
 </div>
-<script>Skillora.init({ active: "interview", title: "Interview AI", sub: "Practise a mock interview and get scored" });</script>
+<script>
+  Skillora.init({ active: "interview", title: "Interview AI", sub: "Practise a mock interview and get scored" }).then((u) => {
+    if (!u) return;
+    Skillora.openSaved("interview", (p) => { renderScorecard(p.card); preparePdf(p.card); });
+  });
+</script>
 </body>
 </html>

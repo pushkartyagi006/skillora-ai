@@ -147,6 +147,42 @@
       }
     }
 
+    function renderResult(data, jobTitle, fileName) {
+      const result = document.getElementById("result");
+      result.innerHTML = "";
+      result.appendChild(pdfRow());
+      result.appendChild(scoreBox(data.scores));
+      result.appendChild(chipsBox("Matched skills", data.scores.matched_skills, "ok"));
+      result.appendChild(chipsBox("Missing skills", data.scores.missing_skills, "miss"));
+
+      if (data.ai_error) {
+        result.appendChild(el("p", data.ai_error, "err"));
+      } else {
+        const s = el("div", undefined, "box");
+        s.appendChild(el("h3", "AI summary"));
+        s.appendChild(el("p", data.match_summary));
+        result.appendChild(s);
+        result.appendChild(listBox("Strengths", data.strengths));
+        result.appendChild(listBox("Weaknesses", data.weaknesses));
+        result.appendChild(listBox("Suggestions", data.suggestions));
+      }
+      preparePdf(data, jobTitle, fileName);
+    }
+
+    // Saves this check to the user's History so it can be opened again any time.
+    function saveResumeCheck(data, jobTitle, fileName) {
+      const sc = data.scores || {};
+      const fit = sc.breakdown && sc.breakdown.fit ? sc.breakdown.fit.score : null;
+      Skillora.saveHistory({
+        kind: "resume_check",
+        title: jobTitle || fileName || "Resume check",
+        summary: "Overall " + sc.overall + "/100" + (fit != null ? ", job fit " + fit : "") + ", " +
+          (sc.matched_skills || []).length + " skills matched, " + (sc.missing_skills || []).length + " missing",
+        score: sc.overall,
+        payload: { data: data, job_title: jobTitle, file_name: fileName }
+      });
+    }
+
     async function analyze() {
       const f = document.getElementById("file").files[0];
       const jd = document.getElementById("jd").value.trim();
@@ -176,24 +212,8 @@
           return;
         }
         status.textContent = "";
-
-        result.appendChild(pdfRow());
-        result.appendChild(scoreBox(data.scores));
-        result.appendChild(chipsBox("Matched skills", data.scores.matched_skills, "ok"));
-        result.appendChild(chipsBox("Missing skills", data.scores.missing_skills, "miss"));
-
-        if (data.ai_error) {
-          result.appendChild(el("p", data.ai_error, "err"));
-        } else {
-          const s = el("div", undefined, "box");
-          s.appendChild(el("h3", "AI summary"));
-          s.appendChild(el("p", data.match_summary));
-          result.appendChild(s);
-          result.appendChild(listBox("Strengths", data.strengths));
-          result.appendChild(listBox("Weaknesses", data.weaknesses));
-          result.appendChild(listBox("Suggestions", data.suggestions));
-        }
-        preparePdf(data, jobTitle, f.name);
+        renderResult(data, jobTitle, f.name);
+        saveResumeCheck(data, jobTitle, f.name);
       } catch (e) {
         status.className = "err";
         status.textContent = "Request failed: " + e;
@@ -206,6 +226,14 @@
     </div>
   </main>
 </div>
-<script>Skillora.init({ active: "resume", title: "Resume AI", sub: "Check your resume against a job description" });</script>
+<script>
+  Skillora.init({ active: "resume", title: "Resume AI", sub: "Check your resume against a job description" }).then((u) => {
+    if (!u) return;
+    Skillora.openSaved("resume_check", (p) => {
+      if (p.job_title) document.getElementById("jobTitle").value = p.job_title;
+      renderResult(p.data, p.job_title || "", p.file_name || "");
+    });
+  });
+</script>
 </body>
 </html>

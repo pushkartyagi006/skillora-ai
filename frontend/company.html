@@ -207,12 +207,24 @@
         render(data);
         document.getElementById("btnPdf").style.display = "inline-block";
         document.getElementById("btnCsv").style.display = "inline-block";
+        saveHiring();
       } catch (e) {
         status.className = "err";
         status.textContent = "Request failed: " + e;
       } finally {
         btn.disabled = false;
       }
+    }
+
+    // Saves this shortlist to the user's History so it can be opened again any time.
+    function saveHiring() {
+      const s = lastResult.summary || {};
+      Skillora.saveHistory({
+        kind: "hiring",
+        title: lastCriteria.job_title || "Hiring shortlist",
+        summary: s.total + " resumes: " + s.shortlisted + " shortlisted, " + s.not_shortlisted + " not shortlisted",
+        payload: { result: lastResult, criteria: lastCriteria }
+      });
     }
 
     function saveBlob(blob, filename) {
@@ -281,6 +293,17 @@
     </div>
   </main>
 </div>
-<script>Skillora.init({ active: "hiring", title: "Hiring AI", sub: "Screen bulk resumes and find the best candidates" });</script>
+<script>
+  Skillora.init({ active: "hiring", title: "Hiring AI", sub: "Screen bulk resumes and find the best candidates" }).then((u) => {
+    if (!u) return;
+    Skillora.openSaved("hiring", (p) => {
+      lastResult = p.result; lastCriteria = p.criteria || {};
+      if (lastCriteria.job_title) document.getElementById("jobTitle").value = lastCriteria.job_title;
+      render(lastResult);
+      document.getElementById("btnPdf").style.display = "inline-block";
+      document.getElementById("btnCsv").style.display = "inline-block";
+    });
+  });
+</script>
 </body>
 </html>

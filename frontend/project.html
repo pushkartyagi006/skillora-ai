@@ -125,6 +125,7 @@
     const VERDICT = { yes: ["Shown", "good"], partly: ["Partly", "warn"], no: ["Not shown", "bad"] };
 
     let state = null;      // analysis result, later merged with roadmap, questions and tips
+    let historyId = null, historySaving = null;   // the History item for this analysis
     let pdfUrl = null;
 
     $("description").addEventListener("input", () => {
@@ -134,7 +135,7 @@
     });
 
     $("go").onclick = analyze;
-    $("again").onclick = () => { state = null; $("formErr").textContent = ""; show("form"); };
+    $("again").onclick = () => { state = null; historyId = null; historySaving = null; $("formErr").textContent = ""; show("form"); };
 
     async function analyze() {
       $("formErr").textContent = "";
@@ -157,6 +158,7 @@
         state = data;
         render(data);
         show("result");
+        saveProject();
         prepare();
       } catch (e) {
         show("form");
@@ -249,6 +251,22 @@
         .forEach(x => { if (x) sw.appendChild(x); });
     }
 
+    // ---------------------------------------------------------------- History
+    function saveProject() {
+      historySaving = Skillora.saveHistory({
+        kind: "project",
+        title: state.title,
+        summary: state.level + " | " + state.overall + "/100" + (state.tech ? " | " + state.tech : ""),
+        score: state.overall,
+        payload: { state: state }
+      }).then((id) => { historyId = id; return id; });
+      return historySaving;
+    }
+    async function updateProjectHistory() {   // adds the roadmap and questions once they are ready
+      if (historySaving) await historySaving;
+      if (historyId) Skillora.updateHistory(historyId, { payload: { state: state } });
+    }
+
     // ---------------------------------------------------------------- roadmap + questions
     const EFFORT = { small: "Small (under half a day)", medium: "Medium (1 to 3 days)", large: "Large (several days)" };
 
@@ -264,6 +282,7 @@
         if (data.error) throw new Error(data.error);
         state.roadmap = data.roadmap; state.questions = data.questions; state.look_tips = data.look_tips;
         renderPrep(data);
+        updateProjectHistory();
         $("prepLoading").hidden = true; $("prepBody").hidden = false;
       } catch (e) {
         $("prepLoading").hidden = true;
@@ -369,6 +388,21 @@
     </div>
   </main>
 </div>
-<script>Skillora.init({ active: "project", title: "Project AI", sub: "Analyze your project and get ready to explain it" });</script>
+<script>
+  Skillora.init({ active: "project", title: "Project AI", sub: "Analyze your project and get ready to explain it" }).then((u) => {
+    if (!u) return;
+    Skillora.openSaved("project", (p, item) => {
+      state = p.state; historyId = item.id;
+      render(state); show("result");
+      if (state.roadmap) {
+        renderPrep({ roadmap: state.roadmap, questions: state.questions || [], look_tips: state.look_tips || [] });
+        $("prepLoading").hidden = true; $("prepErr").hidden = true; $("prepBody").hidden = false;
+        preparePdf();
+      } else {
+        prepare();
+      }
+    });
+  });
+</script>
 </body>
 </html>

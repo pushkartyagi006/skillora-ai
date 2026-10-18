@@ -24,6 +24,12 @@
         <div class="steps" aria-hidden="true"><div></div><div></div><div></div><div></div><div></div></div>
       </section>
 
+      <section id="recentWrap" hidden>
+        <h3 class="sec">Continue where you left off</h3>
+        <div class="recent" id="recent"></div>
+        <a class="seeall" href="/history.html">See all history</a>
+      </section>
+
       <h3 class="sec" id="features">Quick access</h3>
       <div class="fcards" id="cards"></div>
     </main>
@@ -38,6 +44,18 @@
       document.getElementById("cards").innerHTML = Skillora.FEATURES.map((f) =>
         `<a class="fcard" href="${f.href}" style="--c:${f.color}"><div class="fbadge">${Skillora.ic(f.icon)}</div><strong>${f.name}</strong><span>${f.desc}</span></a>`
       ).join("");
+
+      // latest saved results and drafts
+      Skillora.api("/api/history?limit=4").then((d) => {
+        if (!d.items || !d.items.length) return;
+        document.getElementById("recent").innerHTML = d.items.map((it) => {
+          const k = Skillora.HISTORY_KINDS[it.kind] || { label: it.kind, icon: "file", color: "#64748B" };
+          return `<a class="recent-item" href="${Skillora.historyUrl(it)}" style="--c:${k.color}"><span class="rbadge">${Skillora.ic(k.icon)}</span>` +
+            `<span class="rtext"><strong>${Skillora.esc(it.title)}</strong><small>${Skillora.esc(k.label)} · ${Skillora.esc(Skillora.fmtDate(it.updated_at))}</small></span>` +
+            `<span class="rgo">${it.kind === "resume_build" ? "Continue" : "Open"}</span></a>`;
+        }).join("");
+        document.getElementById("recentWrap").hidden = false;
+      });
     });
   </script>
 </body>
