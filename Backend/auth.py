@@ -14,6 +14,9 @@ LOGIN CHECK AND DAILY LIMIT
   install_guard(app) (called once from main.py) protects every /api/ address except /api/auth/ and /api/health.
   A request without a valid login gets "Please log in". Calls that use Gemini are counted per user per day
   in the ai_usage table. When a user passes AI_DAILY_LIMIT (default 60) they get a friendly message until midnight IST.
+
+HISTORY
+  The history table (see history.py) keeps each user's saved results and drafts. It is created here with the other tables.
 """
 
 import functools
@@ -164,6 +167,17 @@ def _ensure_schema(con: Conn):
                 "CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, "
                 "user_id INTEGER, created REAL)",
             ]
+        if con.pg:
+            statements.append(
+                "CREATE TABLE IF NOT EXISTS history(id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, kind TEXT NOT NULL, "
+                "title TEXT NOT NULL, summary TEXT NOT NULL, score DOUBLE PRECISION, payload TEXT NOT NULL, "
+                "created_at DOUBLE PRECISION NOT NULL, updated_at DOUBLE PRECISION NOT NULL)")
+        else:
+            statements.append(
+                "CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, kind TEXT NOT NULL, "
+                "title TEXT NOT NULL, summary TEXT NOT NULL, score REAL, payload TEXT NOT NULL, "
+                "created_at REAL NOT NULL, updated_at REAL NOT NULL)")
+        statements.append("CREATE INDEX IF NOT EXISTS idx_history_user ON history(user_id, updated_at)")
         statements.append("CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)")
         statements.append("CREATE TABLE IF NOT EXISTS ai_usage(user_id BIGINT NOT NULL, used_on TEXT NOT NULL, "
                           "calls INTEGER NOT NULL, PRIMARY KEY(user_id, used_on))")
@@ -394,6 +408,7 @@ def delete_account(body: AccountDelete, authorization: str = Header(default=""))
             return err("Password is wrong.", 400)
         con.execute("DELETE FROM sessions WHERE user_id=?", (row["id"],))
         con.execute("DELETE FROM ai_usage WHERE user_id=?", (row["id"],))
+        con.execute("DELETE FROM history WHERE user_id=?", (row["id"],))
         con.execute("DELETE FROM users WHERE id=?", (row["id"],))
     return {"ok": True}
 
@@ -425,7 +440,7 @@ def today_ist() -> str:
 
 def ai_cost(path: str, method: str) -> int:
     """How many AI uses a request costs. 0 means it is free (PDF, extract text, and similar)."""
-    if method != "POST" or path.endswith(FREE_ENDINGS):
+    if method != "POST" or path.endswith(FREE_ENDINGS) or path.startswith("/api/history"):
         return 0
     return WEIGHTS.get(path, 1)
 

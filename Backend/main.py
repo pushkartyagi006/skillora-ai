@@ -19,9 +19,9 @@ from scoring import compute_scores
 from teacher import router as teacher_router
 from interview import router as interview_router
 from project import router as project_router
-from auth import router as auth_router
-from auth import install_guard
+from auth import install_guard, router as auth_router
 from check_pdf import router as check_router
+from history import router as history_router
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -45,6 +45,7 @@ app.include_router(interview_router)
 app.include_router(project_router)
 app.include_router(auth_router)
 app.include_router(check_router)
+app.include_router(history_router)
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 
 PROMPT = """You are an expert resume reviewer for the Indian tech job market.
