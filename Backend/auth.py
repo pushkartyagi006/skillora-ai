@@ -490,4 +490,7 @@ def install_guard(app):
             denied = await run_in_threadpool(check_access, request.headers.get("authorization", ""), path, request.method)
             if denied is not None:
                 return denied
-        return await call_next(request)
+        response = await call_next(request)
+        if not path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-cache"   # browsers always check for the newest page files
+        return response

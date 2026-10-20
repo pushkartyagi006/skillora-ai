@@ -22,6 +22,7 @@ from project import router as project_router
 from auth import install_guard, router as auth_router
 from check_pdf import router as check_router
 from history import router as history_router
+from journey import router as journey_router
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -46,6 +47,7 @@ app.include_router(project_router)
 app.include_router(auth_router)
 app.include_router(check_router)
 app.include_router(history_router)
+app.include_router(journey_router)
 FRONTEND_DIR = BASE_DIR.parent / "frontend"
 
 PROMPT = """You are an expert resume reviewer for the Indian tech job market.
