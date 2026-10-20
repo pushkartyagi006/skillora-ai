@@ -24,6 +24,35 @@
         <div class="steps" aria-hidden="true"><div></div><div></div><div></div><div></div><div></div></div>
       </section>
 
+      <!-- My Journey: filled from your saved History -->
+      <section id="welcome" class="welcome" hidden>
+        <h3>Your journey starts here</h3>
+        <p>Everything you do in Skillora AI is saved to your account. Do any of the steps below, and this page will start showing your progress, score trends and achievements.</p>
+      </section>
+
+      <section id="statsWrap" hidden>
+        <h3 class="sec">Your journey so far</h3>
+        <div class="jgrid" id="stats"></div>
+      </section>
+
+      <section id="nextWrap" hidden>
+        <h3 class="sec">Your next steps</h3>
+        <div class="nextlist" id="next"></div>
+      </section>
+
+      <section id="trendsWrap" hidden>
+        <h3 class="sec">Your progress over time</h3>
+        <div class="trends" id="trends"></div>
+      </section>
+
+      <section id="habitWrap" hidden>
+        <h3 class="sec">Your habits and achievements</h3>
+        <div class="jtwo">
+          <div class="jbox" id="streakBox"></div>
+          <div class="jbox" id="badgeBox"></div>
+        </div>
+      </section>
+
       <section id="recentWrap" hidden>
         <h3 class="sec">Continue where you left off</h3>
         <div class="recent" id="recent"></div>
@@ -36,25 +65,161 @@
   </div>
 
   <script>
-    Skillora.init({ active: "home", title: "Welcome", sub: "Your growth. Our AI. Endless possibilities." }).then((u) => {
+    const S = Skillora, $ = (id) => document.getElementById(id);
+    const KIND = S.HISTORY_KINDS;
+
+    // ------------------------------------------------------------------ small helpers
+    const dayStart = (ts) => { const d = new Date(ts * 1000); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+    const dayBefore = (ms) => { const d = new Date(ms); return new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1).getTime(); };
+    const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+    const CHECK = '<svg class="ic" style="width:15px;height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg>';
+    const latest = (list) => list.length ? list[list.length - 1] : null;
+    const best = (list) => list.reduce((m, p) => Math.max(m, p.score), 0);
+
+    function streaks(activity) {
+      const days = new Set(activity.map(dayStart));
+      let t = dayStart(Date.now() / 1000);
+      if (!days.has(t)) t = dayBefore(t);                 // today not used yet: the streak is still alive until tonight
+      let current = 0;
+      while (days.has(t)) { current++; t = dayBefore(t); }
+      let longest = 0, run = 0;
+      [...days].sort((a, b) => a - b).forEach((d, i, arr) => {
+        run = i > 0 && dayBefore(d) === arr[i - 1] ? run + 1 : 1;
+        longest = Math.max(longest, run);
+      });
+      return { current, longest, days };
+    }
+
+    // ------------------------------------------------------------------ rules for the "next steps" cards
+    function nextSteps(d) {
+      const c = d.counts, out = [], ins = d.insights;
+      const rc = latest(d.trends.resume_check), iv = latest(d.trends.interview);
+      const step = (kind, title, text, href, cta) => out.push({ kind, title, text, href, cta });
+      if (!c.resume_check) step("resume_check", "Check your resume against a job", "Paste a job description and see your score, the skills you match and the ones you are missing.", "/resume.html", "Check my resume");
+      const fix = ins.project_fix;
+      if (fix && (fix.score == null || fix.score < 70)) {
+        step("project", "Improve " + fix.project + ": " + fix.step,
+          (fix.gain ? "This could add about " + fix.gain + " points to your project score. " : "") + (fix.why || ""), "/project.html?history=" + fix.item_id, "Open the roadmap");
+      }
+      if (ins.missing_skills.length) {
+        const m = ins.missing_skills[0];
+        step("resume_check", cap(m.skill) + " keeps coming up", "It was missing in " + m.count + " of your last " + ins.checks_considered + " resume checks. Learning it could lift your job fit.", "/resume.html", "Check again");
+      }
+      if (rc && rc.score < 60) step("resume_build", "Raise your resume score", "Your latest resume check scored " + Math.round(rc.score) + ". The Resume Builder can help you rewrite it with AI.", "/builder.html", "Build a resume");
+      if (!c.project) step("project", "Analyze one of your projects", "Get a score, an improvement roadmap and interview questions about your project.", "/project.html", "Analyze a project");
+      if (!c.interview) step("interview", "Practise a mock interview", "Answer interview questions with a timer and get scored with feedback.", "/interview.html", "Start practising");
+      else if (iv && iv.score < 60) step("interview", "Practise again", "Your latest interview scored " + Math.round(iv.score) + ". Another round is the fastest way to improve.", "/interview.html", "Practise again");
+      const lt = d.latest;
+      if (lt && (Date.now() / 1000 - lt.updated_at) > 3 * 86400)
+        step(lt.kind, "Welcome back", "Pick up where you left off: " + lt.title, S.historyUrl(lt), "Continue");
+      if (!out.length) step("interview", "You are on a roll", "Run another check or practise an interview to keep improving.", "/interview.html", "Practise");
+      return out.slice(0, 3);
+    }
+
+    // ------------------------------------------------------------------ achievements
+    function badges(d, st) {
+      const t = d.trends, c = d.counts;
+      const improved = Object.values(t).some((l) => l.length >= 2 && latest(l).score - l[0].score >= 10);
+      const toolsUsed = ["resume_check", "project", "interview", "hiring", "teacher", "resume_build"].filter((k) => c[k] > 0).length;
+      return [
+        ["First resume check", c.resume_check >= 1], ["First project analysis", c.project >= 1], ["First mock interview", c.interview >= 1],
+        ["Resume score 70+", best(t.resume_check) >= 70], ["Project score 70+", best(t.project) >= 70], ["Interview score 70+", best(t.interview) >= 70],
+        ["Improver: up 10 points", improved], ["3-day streak", st.longest >= 3], ["Explorer: 3 tools used", toolsUsed >= 3],
+      ];
+    }
+
+    // ------------------------------------------------------------------ drawing
+    function spark(points, color) {
+      const W = 240, H = 64, pad = 8, n = points.length;
+      const x = (i) => n === 1 ? W / 2 : pad + (i * (W - 2 * pad)) / (n - 1);
+      const y = (v) => H - pad - (Math.max(0, Math.min(100, v)) / 100) * (H - 2 * pad);
+      const line = points.map((p, i) => x(i).toFixed(1) + "," + y(p.score).toFixed(1)).join(" ");
+      const dots = points.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.score).toFixed(1)}" r="${i === n - 1 ? 4.5 : 3}" fill="${color}"><title>${S.esc(p.title)}: ${Math.round(p.score)} on ${S.esc(S.fmtDate(p.t))}</title></circle>`).join("");
+      return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Score trend">` +
+        `<line x1="${pad}" y1="${y(70)}" x2="${W - pad}" y2="${y(70)}" stroke="var(--line)" stroke-dasharray="3 4"/>` +
+        (n > 1 ? `<polyline points="${line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>` : "") + dots + `</svg>`;
+    }
+
+    function drawStats(d, role) {
+      const wanted = { teacher: ["teacher", "resume_check", "project", "interview"], company: ["hiring", "resume_check", "project", "interview"] }[role]
+        || ["resume_check", "project", "interview", "resume_build"];
+      const names = { resume_check: "Resume checks", resume_build: "Resume drafts", teacher: "Report checks", hiring: "Shortlists", interview: "Practice interviews", project: "Projects analyzed" };
+      $("stats").innerHTML = wanted.map((k) =>
+        `<a class="stat" href="${KIND[k].page}" style="--c:${KIND[k].color}"><span class="sbadge">${S.ic(KIND[k].icon)}</span><span><b>${d.counts[k]}</b><span class="lbl">${names[k]}</span></span></a>`).join("");
+    }
+
+    function drawTrends(d) {
+      const defs = [["resume_check", "Resume score", "/resume.html", "Check your resume"], ["project", "Project score", "/project.html", "Analyze a project"], ["interview", "Interview score", "/interview.html", "Practise an interview"]];
+      $("trends").innerHTML = defs.map(([k, name, href, cta]) => {
+        const pts = d.trends[k], last = latest(pts), color = KIND[k].color;
+        let body;
+        if (!pts.length) body = `<p class="thint">No scores yet. <a href="${href}">${cta}</a> to start your trend.</p>`;
+        else {
+          const diff = pts.length > 1 ? Math.round(last.score - pts[0].score) : null;
+          const cls = diff == null ? "flat" : diff > 0 ? "up" : diff < 0 ? "down" : "flat";
+          const txt = diff == null ? "First score recorded" : diff > 0 ? "Up " + diff + " since your first" : diff < 0 ? "Down " + Math.abs(diff) + " since your first" : "Same as your first";
+          body = `<div class="tdelta ${cls}">${txt}</div>${spark(pts, color)}` +
+            (pts.length === 1 ? `<p class="thint">Do one more to see your trend line. <a href="${href}">${cta}</a></p>` : `<p class="thint">Last ${pts.length} results. Dotted line marks 70.</p>`);
+        }
+        return `<div class="trend" style="--c:${color}"><div class="thead"><span class="tname">${name}</span>` +
+          (last ? `<span class="tscore">${Math.round(last.score)}<small>/100</small></span>` : "") + `</div>${body}</div>`;
+      }).join("");
+    }
+
+    function drawHabits(d) {
+      const st = streaks(d.activity), today = dayStart(Date.now() / 1000);
+      const counts = {}; d.activity.forEach((ts) => { const k = dayStart(ts); counts[k] = (counts[k] || 0) + 1; });
+      let week = "";
+      for (let i = 6; i >= 0; i--) {
+        const dt = new Date(new Date(today).getFullYear(), new Date(today).getMonth(), new Date(today).getDate() - i), ms = dt.getTime();
+        const n = counts[ms] || 0;
+        week += `<div class="wday${n ? " on" : ""}${i === 0 ? " today" : ""}" title="${dt.toLocaleDateString()}${n ? "" : ": no activity"}"><i style="height:${n ? 10 + Math.min(n, 4) * 7 : 6}px"></i>${dt.toLocaleDateString(undefined, { weekday: "short" })}</div>`;
+      }
+      $("streakBox").innerHTML = `<h4>Activity streak</h4><p class="jsub">Days in a row you used Skillora AI</p>` +
+        `<div class="streaknum">${st.current}<small> ${st.current === 1 ? "day" : "days"}</small></div>` +
+        `<p class="jsub" style="margin:6px 0 0">Longest streak: ${st.longest} ${st.longest === 1 ? "day" : "days"}</p><div class="week">${week}</div>`;
+      const list = badges(d, st), got = list.filter((b) => b[1]).length;
+      $("badgeBox").innerHTML = `<h4>Achievements</h4><p class="jsub">${got} of ${list.length} earned</p><div class="badges">` +
+        list.map(([name, ok]) => `<div class="bdg${ok ? " got" : ""}"><i>${ok ? CHECK : ""}</i>${S.esc(name)}</div>`).join("") + `</div>`;
+    }
+
+    function drawNext(d) {
+      $("next").innerHTML = nextSteps(d).map((s) => {
+        const k = KIND[s.kind] || KIND.resume_check;
+        return `<div class="next" style="--c:${k.color}"><span class="nbadge">${S.ic(k.icon)}</span><div class="ntext"><strong>${S.esc(s.title)}</strong><span>${S.esc(s.text)}</span></div><a class="btn" href="${s.href}">${S.esc(s.cta)}</a></div>`;
+      }).join("");
+      $("nextWrap").hidden = false;
+    }
+
+    // ------------------------------------------------------------------ page
+    S.init({ active: "home", title: "Welcome", sub: "Your growth. Our AI. Endless possibilities." }).then((u) => {
       if (!u) return;
       const h = new Date().getHours();
       const part = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
       document.querySelector("#top h1").textContent = part + ", " + u.name.split(" ")[0];
-      document.getElementById("cards").innerHTML = Skillora.FEATURES.map((f) =>
-        `<a class="fcard" href="${f.href}" style="--c:${f.color}"><div class="fbadge">${Skillora.ic(f.icon)}</div><strong>${f.name}</strong><span>${f.desc}</span></a>`
+      $("cards").innerHTML = S.FEATURES.map((f) =>
+        `<a class="fcard" href="${f.href}" style="--c:${f.color}"><div class="fbadge">${S.ic(f.icon)}</div><strong>${f.name}</strong><span>${f.desc}</span></a>`
       ).join("");
 
+      S.api("/api/journey").then((d) => {
+        if (d.error || !d.counts) return;                     // the rest of Home still works without it
+        drawNext(d);
+        if (!d.total) { $("welcome").hidden = false; return; }
+        drawStats(d, u.role); $("statsWrap").hidden = false;
+        drawTrends(d); $("trendsWrap").hidden = false;
+        drawHabits(d); $("habitWrap").hidden = false;
+      });
+
       // latest saved results and drafts
-      Skillora.api("/api/history?limit=4").then((d) => {
+      S.api("/api/history?limit=4").then((d) => {
         if (!d.items || !d.items.length) return;
-        document.getElementById("recent").innerHTML = d.items.map((it) => {
-          const k = Skillora.HISTORY_KINDS[it.kind] || { label: it.kind, icon: "file", color: "#64748B" };
-          return `<a class="recent-item" href="${Skillora.historyUrl(it)}" style="--c:${k.color}"><span class="rbadge">${Skillora.ic(k.icon)}</span>` +
-            `<span class="rtext"><strong>${Skillora.esc(it.title)}</strong><small>${Skillora.esc(k.label)} · ${Skillora.esc(Skillora.fmtDate(it.updated_at))}</small></span>` +
+        $("recent").innerHTML = d.items.map((it) => {
+          const k = KIND[it.kind] || { label: it.kind, icon: "file", color: "#64748B" };
+          return `<a class="recent-item" href="${S.historyUrl(it)}" style="--c:${k.color}"><span class="rbadge">${S.ic(k.icon)}</span>` +
+            `<span class="rtext"><strong>${S.esc(it.title)}</strong><small>${S.esc(k.label)} · ${S.esc(S.fmtDate(it.updated_at))}</small></span>` +
             `<span class="rgo">${it.kind === "resume_build" ? "Continue" : "Open"}</span></a>`;
         }).join("");
-        document.getElementById("recentWrap").hidden = false;
+        $("recentWrap").hidden = false;
       });
     });
   </script>
