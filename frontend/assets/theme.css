@@ -99,3 +99,47 @@ h3.sec{margin:30px 0 14px;font-size:17px}
 .rgo{font-size:12px;font-weight:800;color:var(--c)}
 .seeall{display:inline-block;margin-top:10px;font-weight:700;font-size:14px}
 @media(prefers-reduced-motion:reduce){.toast{animation:none}}
+/* ---------- My Journey (Home) ---------- */
+.jgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+.stat{display:flex;align-items:center;gap:14px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--surface);box-shadow:var(--shadow);text-decoration:none;color:var(--text);transition:transform .15s,border-color .15s}
+.stat:hover{transform:translateY(-2px);border-color:var(--c)}
+.sbadge{flex:none;width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:var(--c);color:#fff}
+.stat b{display:block;font-size:28px;line-height:1.05;letter-spacing:-.02em}
+.stat span.lbl{color:var(--muted);font-size:13px}
+.welcome{margin-top:22px;padding:22px 24px;border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:16px;background:var(--surface);box-shadow:var(--shadow)}
+.welcome h3{margin:0 0 6px;font-size:19px}.welcome p{margin:0;color:var(--muted)}
+.nextlist{display:grid;gap:12px}
+.next{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding:16px 18px;border:1px solid var(--line);border-radius:16px;background:var(--surface);box-shadow:var(--shadow)}
+.next:first-child{border-color:var(--blue);background:linear-gradient(90deg,var(--tint),var(--surface) 65%)}
+.next .nbadge{flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--c);color:#fff}
+.next .ntext{flex:1 1 260px;min-width:0}
+.next .ntext strong{display:block;font-size:15px;overflow-wrap:anywhere}
+.next .ntext span{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.next .btn{padding:9px 16px;font-size:14px}
+.trends{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+.trend{padding:16px 18px;border:1px solid var(--line);border-radius:16px;background:var(--surface);box-shadow:var(--shadow)}
+.trend .thead{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.trend .tname{font-weight:700;font-size:14px}
+.trend .tscore{font-size:30px;font-weight:800;line-height:1;letter-spacing:-.02em;color:var(--c)}
+.trend .tscore small{font-size:12px;font-weight:600;color:var(--muted)}
+.trend .tdelta{margin:6px 0 4px;font-size:13px;font-weight:700}
+.tdelta.up{color:var(--ok)}.tdelta.down{color:var(--bad)}.tdelta.flat{color:var(--muted)}
+.trend svg{display:block;width:100%;height:64px;margin-top:6px}
+.trend .thint{margin:10px 0 0;color:var(--muted);font-size:13px}
+.trend .thint a{font-weight:700}
+.jtwo{display:grid;grid-template-columns:1fr 1.4fr;gap:14px;margin-top:6px}
+.jbox{padding:18px 20px;border:1px solid var(--line);border-radius:16px;background:var(--surface);box-shadow:var(--shadow)}
+.jbox h4{margin:0 0 4px;font-size:15px}
+.jbox .jsub{margin:0 0 12px;color:var(--muted);font-size:13px}
+.streaknum{font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1}.streaknum small{font-size:14px;font-weight:600;color:var(--muted)}
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:14px;align-items:end}
+.wday{text-align:center;font-size:11px;color:var(--muted)}
+.wday i{display:block;margin:0 auto 5px;width:100%;max-width:26px;min-height:6px;border-radius:6px;background:var(--line)}
+.wday.on i{background:linear-gradient(180deg,var(--cyan),var(--blue))}
+.wday.today{color:var(--text);font-weight:800}
+.badges{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.bdg{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;font-size:13px;font-weight:600;background:var(--soft);color:var(--muted)}
+.bdg i{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--line);color:var(--muted)}
+.bdg.got{background:var(--ok-bg);border-color:transparent;color:var(--text)}
+.bdg.got i{background:var(--ok);color:#fff}
+@media(max-width:900px){.jtwo{grid-template-columns:1fr}}
